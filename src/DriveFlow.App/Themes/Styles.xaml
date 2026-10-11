@@ -18,7 +18,7 @@
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource Text}" />
     </Style>
-    <Style x:Key="Muted" TargetType="TextBlock">
+    <Style x:Key="MutedText" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource Muted}" />
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>

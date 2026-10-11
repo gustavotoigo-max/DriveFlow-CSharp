@@ -99,7 +99,7 @@
                                     <Button Content="Adicionar pasta…" Click="AddFolder_Click" ToolTip="A pasta sobe com as mesmas subpastas no Drive" />
                                     <Button Content="Limpar seleção" Click="ClearSelection_Click" />
                                 </WrapPanel>
-                                <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Muted}" Margin="0,8,0,0"
+                                <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource MutedText}" Margin="0,8,0,0"
                                            Text="Escolha o destino ao lado e clique em Iniciar. Pastas sobem com as subpastas." />
                                 <ListBox x:Name="SourceList" SelectionMode="Extended">
                                     <ListBox.ItemTemplate>
@@ -124,10 +124,10 @@
                                     </StackPanel>
                                     <TextBlock Text="Destino no Google Drive" Style="{StaticResource Section}" VerticalAlignment="Center" />
                                 </DockPanel>
-                                <TextBlock x:Name="DrivePath" DockPanel.Dock="Top" Style="{StaticResource Muted}" Text="Meu Drive" Margin="0,6,0,6" />
+                                <TextBlock x:Name="DrivePath" DockPanel.Dock="Top" Style="{StaticResource MutedText}" Text="Meu Drive" Margin="0,6,0,6" />
                                 <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
                                     <Button HorizontalAlignment="Left" Content="Usar esta pasta" Click="ChooseFolder_Click" />
-                                    <TextBlock x:Name="DestinationText" Style="{StaticResource Muted}" Margin="0,6,0,0" Text="Conecte a conta." />
+                                    <TextBlock x:Name="DestinationText" Style="{StaticResource MutedText}" Margin="0,6,0,0" Text="Conecte a conta." />
                                 </StackPanel>
                                 <TreeView x:Name="FolderTree" SelectedItemChanged="FolderTree_SelectedItemChanged" MouseDoubleClick="FolderTree_DoubleClick">
                                     <TreeView.ItemContainerStyle>
@@ -302,7 +302,7 @@
                         <Border Style="{StaticResource Card}" Margin="0,0,0,12">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource Section}" Text="Notificações WhatsApp" Margin="0,0,0,6" />
-                                <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10"
+                                <TextBlock Style="{StaticResource MutedText}" Margin="0,0,0,10"
                                            Text="Quando todos os uploads de uma pasta terminam, cada número recebe &quot;PASTA UPLOAD FINALIZADO&quot; pelo CallMeBot." />
                                 <CheckBox x:Name="WhatsAppEnabled" Content="Enviar notificação ao finalizar upload" Margin="0,0,0,10" />
                                 <Grid Margin="0,0,0,8">
@@ -316,7 +316,7 @@
                                     <TextBox x:Name="ApiKeyBox" Grid.Column="2" ToolTip="Apikey recebida do CallMeBot" />
                                     <Button Grid.Column="3" Content="Adicionar número" Margin="8,0,0,0" Click="AddPhone_Click" />
                                 </Grid>
-                                <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
+                                <TextBlock Style="{StaticResource MutedText}" Margin="0,0,0,8"
                                            Text="Número: DDI + DDD + número, como o WhatsApp registra (ex.: 554899494404, muitas vezes sem o 9). Ao lado, a apikey." />
                                 <ListBox x:Name="PhoneList" Height="110" BorderBrush="{DynamicResource Border}" BorderThickness="1" />
                                 <WrapPanel Margin="0,10,0,0">
@@ -330,10 +330,10 @@
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource Section}" Text="Conta e dados" Margin="0,0,0,8" />
-                                <TextBlock x:Name="ClientNote" Style="{StaticResource Muted}" Margin="0,0,0,8"
+                                <TextBlock x:Name="ClientNote" Style="{StaticResource MutedText}" Margin="0,0,0,8"
                                            Text="Conectar conta pede o JSON OAuth (Aplicativo para computador) do Google Cloud." />
                                 <Button HorizontalAlignment="Left" Content="Usar outro JSON OAuth…" Click="ImportClient_Click" Margin="0,0,0,10" />
-                                <TextBlock x:Name="DataDirText" Style="{StaticResource Muted}" Margin="0,0,0,8" />
+                                <TextBlock x:Name="DataDirText" Style="{StaticResource MutedText}" Margin="0,0,0,8" />
                                 <Button HorizontalAlignment="Left" Content="Abrir pasta de dados" Click="OpenDataDir_Click" />
                             </StackPanel>
                         </Border>
