@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{E08414D1-1A40-4815-B887-E2B0F6EE46C3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DriveFlow.Core", "src\DriveFlow.Core\DriveFlow.Core.csproj", "{AA8C35E0-34E7-4B4D-BEA5-8853B33AB90E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{AA6862CA-DBA4-4FD3-9E49-F072AB64400C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DriveFlow.Core.Tests", "tests\DriveFlow.Core.Tests\DriveFlow.Core.Tests.csproj", "{9F98CCFB-409C-4794-8427-4A56515A250D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{AA8C35E0-34E7-4B4D-BEA5-8853B33AB90E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AA8C35E0-34E7-4B4D-BEA5-8853B33AB90E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AA8C35E0-34E7-4B4D-BEA5-8853B33AB90E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AA8C35E0-34E7-4B4D-BEA5-8853B33AB90E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9F98CCFB-409C-4794-8427-4A56515A250D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9F98CCFB-409C-4794-8427-4A56515A250D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9F98CCFB-409C-4794-8427-4A56515A250D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9F98CCFB-409C-4794-8427-4A56515A250D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{AA8C35E0-34E7-4B4D-BEA5-8853B33AB90E} = {E08414D1-1A40-4815-B887-E2B0F6EE46C3}
+		{9F98CCFB-409C-4794-8427-4A56515A250D} = {AA6862CA-DBA4-4FD3-9E49-F072AB64400C}
+	EndGlobalSection
+EndGlobal
