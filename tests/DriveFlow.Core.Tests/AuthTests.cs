@@ -133,7 +133,9 @@ public sealed class AuthTests : IDisposable
         };
         var client = new OAuthClient("cid", "sec", "https://accounts.google.com/o/oauth2/auth", "https://oauth2.googleapis.com/token");
 
-        await auth.Login(client);
+        // Falha em segundos em vez de esperar os 3 minutos do login.
+        using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        await auth.Login(client, ct: limit.Token);
 
         Assert.NotNull(opened);
         Assert.StartsWith("http://127.0.0.1:", LoopbackRedirect.Parse(new Uri(opened!).Query.TrimStart('?'))["redirect_uri"]);
