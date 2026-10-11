@@ -1,0 +1,362 @@
+<Window x:Class="DriveFlow.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:DriveFlow.App"
+        Title="DriveFlow" Width="1390" Height="920" MinWidth="1080" MinHeight="750"
+        WindowStartupLocation="CenterScreen" Background="{DynamicResource Bg}"
+        FontFamily="{StaticResource UiFont}" FontSize="13" Foreground="{DynamicResource Text}">
+    <!-- "Borda infinita": o cabeçalho azul-marinho é a barra de título. -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="40" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="40" />
+            <RowDefinition Height="2" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="28" />
+        </Grid.RowDefinitions>
+
+        <!-- Barra de título -->
+        <DockPanel Grid.Row="0" Background="{DynamicResource Navy}">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Style="{StaticResource Caption}" Content="&#xE921;" Click="Minimize_Click" ToolTip="Minimizar" />
+                <Button x:Name="MaximizeButton" Style="{StaticResource Caption}" Content="&#xE922;" Click="Maximize_Click" ToolTip="Maximizar" />
+                <Button Style="{StaticResource CaptionClose}" Content="&#xE8BB;" Click="Close_Click" ToolTip="Fechar" />
+            </StackPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <Ellipse x:Name="ConnectionDot" Width="7" Height="7" Fill="{DynamicResource OnNavyMuted}" Margin="0,0,8,0" />
+                <TextBlock x:Name="AccountText" Text="Desconectado" Foreground="{DynamicResource OnNavyMuted}" FontSize="12" VerticalAlignment="Center" />
+                <Button x:Name="ConnectButton" Style="{StaticResource NavyButton}" Content="Entrar com Google" Click="Connect_Click" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
+                <TextBlock Text="&#xE898;" FontFamily="{StaticResource IconFont}" FontSize="16" Foreground="#22D3EE" VerticalAlignment="Center" Margin="0,0,10,0" />
+                <TextBlock Text="DriveFlow" Foreground="{DynamicResource OnNavy}" FontWeight="SemiBold" VerticalAlignment="Center" />
+            </StackPanel>
+        </DockPanel>
+        <Border Grid.Row="1">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                    <GradientStop Color="#2563EB" Offset="0" />
+                    <GradientStop Color="#22D3EE" Offset="1" />
+                </LinearGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="208" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Menu lateral -->
+            <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="0,0,1,0">
+                <StackPanel Margin="12,18">
+                    <RadioButton x:Name="NavTransfers" Style="{StaticResource Nav}" Tag="&#xE898;" Content="Transferências" IsChecked="True" Checked="Nav_Checked" />
+                    <RadioButton x:Name="NavHistory" Style="{StaticResource Nav}" Tag="&#xE81C;" Content="Histórico" Checked="Nav_Checked" />
+                    <RadioButton x:Name="NavSettings" Style="{StaticResource Nav}" Tag="&#xE713;" Content="Configurações" Checked="Nav_Checked" />
+                    <RadioButton x:Name="NavActivity" Style="{StaticResource Nav}" Tag="&#xE8FD;" Content="Atividade" Checked="Nav_Checked" />
+                </StackPanel>
+            </Border>
+
+            <Grid Grid.Column="1" Margin="24,20,24,16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Números do topo -->
+                <Border Style="{StaticResource Card}" Padding="14,7" Margin="0,0,0,10">
+                    <UniformGrid Columns="4">
+                        <StackPanel><TextBlock Style="{StaticResource StatLabel}" Text="NA FILA" /><TextBlock x:Name="StatQueued" Style="{StaticResource Stat}" Text="—" /></StackPanel>
+                        <StackPanel><TextBlock Style="{StaticResource StatLabel}" Text="CONFIRMADOS" /><TextBlock x:Name="StatConfirmed" Style="{StaticResource Stat}" Text="—" /></StackPanel>
+                        <StackPanel><TextBlock Style="{StaticResource StatLabel}" Text="VELOCIDADE" /><TextBlock x:Name="StatSpeed" Style="{StaticResource Stat}" Text="—" /></StackPanel>
+                        <StackPanel><TextBlock Style="{StaticResource StatLabel}" Text="CONCLUÍDOS" /><TextBlock x:Name="StatDone" Style="{StaticResource Stat}" Text="—" /></StackPanel>
+                    </UniformGrid>
+                </Border>
+
+                <!-- Transferências -->
+                <Grid x:Name="TransfersPage" Grid.Row="1">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" MinHeight="220" />
+                        <RowDefinition Height="12" />
+                        <RowDefinition Height="*" MinHeight="200" />
+                    </Grid.RowDefinitions>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Style="{StaticResource Card}">
+                            <DockPanel>
+                                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                                    <TextBlock Text="Arquivos para enviar" Style="{StaticResource Section}" VerticalAlignment="Center" />
+                                </DockPanel>
+                                <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                                    <Button Content="Adicionar arquivos…" Click="AddFiles_Click" />
+                                    <Button Content="Adicionar pasta…" Click="AddFolder_Click" ToolTip="A pasta sobe com as mesmas subpastas no Drive" />
+                                    <Button Content="Limpar seleção" Click="ClearSelection_Click" />
+                                </WrapPanel>
+                                <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Muted}" Margin="0,8,0,0"
+                                           Text="Escolha o destino ao lado e clique em Iniciar. Pastas sobem com as subpastas." />
+                                <ListBox x:Name="SourceList" SelectionMode="Extended">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Icon}" FontFamily="{StaticResource IconFont}" Margin="0,0,10,0" VerticalAlignment="Center" Foreground="{DynamicResource Accent}" />
+                                                <TextBlock Text="{Binding Path}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </DockPanel>
+                        </Border>
+
+                        <Border Grid.Column="2" Style="{StaticResource Card}">
+                            <DockPanel>
+                                <DockPanel DockPanel.Dock="Top">
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                        <Button Style="{StaticResource IconButton}" Content="&#xE72B;" ToolTip="Voltar" Click="DriveBack_Click" />
+                                        <Button Style="{StaticResource IconButton}" Content="&#xE72C;" ToolTip="Atualizar" Click="DriveRefresh_Click" />
+                                        <Button Style="{StaticResource IconButton}" Content="&#xE8F4;" ToolTip="Nova pasta" Click="NewFolder_Click" />
+                                    </StackPanel>
+                                    <TextBlock Text="Destino no Google Drive" Style="{StaticResource Section}" VerticalAlignment="Center" />
+                                </DockPanel>
+                                <TextBlock x:Name="DrivePath" DockPanel.Dock="Top" Style="{StaticResource Muted}" Text="Meu Drive" Margin="0,6,0,6" />
+                                <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                                    <Button HorizontalAlignment="Left" Content="Usar esta pasta" Click="ChooseFolder_Click" />
+                                    <TextBlock x:Name="DestinationText" Style="{StaticResource Muted}" Margin="0,6,0,0" Text="Conecte a conta." />
+                                </StackPanel>
+                                <TreeView x:Name="FolderTree" SelectedItemChanged="FolderTree_SelectedItemChanged" MouseDoubleClick="FolderTree_DoubleClick">
+                                    <TreeView.ItemContainerStyle>
+                                        <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
+                                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+                                        </Style>
+                                    </TreeView.ItemContainerStyle>
+                                    <TreeView.ItemTemplate>
+                                        <HierarchicalDataTemplate DataType="{x:Type local:FolderNode}" ItemsSource="{Binding Children}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="&#xE8B7;" FontFamily="{StaticResource IconFont}" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{DynamicResource Subtle}" />
+                                                <TextBlock Text="{Binding Name}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsDestination}" Value="True">
+                                                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                                                    <Setter Property="Foreground" Value="{DynamicResource Success}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </HierarchicalDataTemplate>
+                                    </TreeView.ItemTemplate>
+                                </TreeView>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+
+                    <GridSplitter Grid.Row="1" HorizontalAlignment="Stretch" Background="Transparent" />
+
+                    <Border Grid.Row="2" Style="{StaticResource Card}">
+                        <DockPanel>
+                            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                    <Button Content="Pausar todos" Click="PauseAll_Click" />
+                                    <Button x:Name="StartButton" Style="{StaticResource Primary}" Content="Iniciar" Margin="0" Click="Start_Click"
+                                            ToolTip="Adiciona os arquivos escolhidos e envia os itens marcados da fila" />
+                                </StackPanel>
+                                <TextBlock Text="Fila de uploads" Style="{StaticResource Section}" VerticalAlignment="Center" />
+                            </DockPanel>
+                            <ListBox x:Name="QueueList" SelectionChanged="QueueList_SelectionChanged">
+                                <ListBox.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Renomear antes do envio" Click="Rename_Click" />
+                                        <MenuItem Header="Reiniciar sessão expirada" Click="Restart_Click" />
+                                    </ContextMenu>
+                                </ListBox.ContextMenu>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type local:QueueRow}">
+                                        <Grid ToolTip="{Binding Tip}" Height="66">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="28" />
+                                                <ColumnDefinition Width="2*" MinWidth="200" />
+                                                <ColumnDefinition Width="3*" />
+                                                <ColumnDefinition Width="115" />
+                                                <ColumnDefinition Width="160" />
+                                                <ColumnDefinition Width="176" />
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox IsChecked="{Binding Enabled, Mode=TwoWay}" VerticalAlignment="Center" ToolTip="Incluir no Iniciar" />
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding Destination}" Foreground="{DynamicResource Subtle}" TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="16,0">
+                                                <TextBlock Text="{Binding BytesText}" Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" Margin="0,0,0,4" />
+                                                <ProgressBar Value="{Binding Progress, Mode=OneWay}">
+                                                    <ProgressBar.Style>
+                                                        <Style TargetType="ProgressBar" BasedOn="{StaticResource Progress}">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsDone}" Value="True">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource DoneGradient}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </ProgressBar.Style>
+                                                </ProgressBar>
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="3" Text="{Binding StatusText}" VerticalAlignment="Center">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{DynamicResource Subtle}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                                <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <TextBlock Grid.Column="4" Text="{Binding TimeText}" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" FontSize="12" />
+                                            <StackPanel Grid.Column="5" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                <Button Style="{StaticResource IconButton}" Content="&#xE768;" ToolTip="Iniciar / continuar" Click="RowPlay_Click" IsEnabled="{Binding CanAct}" />
+                                                <Button Style="{StaticResource IconButton}" Content="&#xE769;" ToolTip="Pausar" Click="RowPause_Click" IsEnabled="{Binding CanAct}" />
+                                                <Button Style="{StaticResource IconButton}" Content="&#xE71A;" ToolTip="Parar" Click="RowStop_Click" IsEnabled="{Binding CanAct}" />
+                                                <Button Style="{StaticResource IconButton}" Content="&#xE74D;" ToolTip="Remover da lista" Click="RowRemove_Click" IsEnabled="{Binding CanAct}" Margin="16,0,0,0" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </DockPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Histórico -->
+                <DockPanel x:Name="HistoryPage" Grid.Row="1" Visibility="Collapsed">
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource Title}" Text="Histórico de envios" />
+                    <WrapPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                        <Button Style="{StaticResource Primary}" Content="Copiar link" Click="CopyLink_Click" />
+                        <Button Content="Abrir no Google Drive" Click="OpenLink_Click" />
+                        <Button Content="Copiar ID" Click="CopyId_Click" />
+                        <Button Content="Limpar histórico" Click="ClearHistory_Click" Margin="24,0,0,0" />
+                    </WrapPanel>
+                    <Border Style="{StaticResource Card}">
+                        <ListBox x:Name="HistoryList">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate DataType="{x:Type local:HistoryRow}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="2*" />
+                                            <ColumnDefinition Width="100" />
+                                            <ColumnDefinition Width="2*" />
+                                            <ColumnDefinition Width="170" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="1" Text="{Binding SizeText}" Foreground="{DynamicResource Muted}" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Destination}" Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="3" Text="{Binding When}" Foreground="{DynamicResource Muted}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Border>
+                </DockPanel>
+
+                <!-- Configurações -->
+                <ScrollViewer x:Name="SettingsPage" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                    <StackPanel MaxWidth="820" HorizontalAlignment="Left">
+                        <TextBlock Style="{StaticResource Title}" Text="Configurações" />
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="Tema" VerticalAlignment="Center" Margin="0,0,0,14" />
+                                <ComboBox x:Name="ThemeBox" Grid.Column="1" HorizontalAlignment="Left" Margin="0,0,0,14" SelectionChanged="Theme_Changed" />
+                                <TextBlock Grid.Row="1" Text="Uploads simultâneos" VerticalAlignment="Center" Margin="0,0,0,14" />
+                                <ComboBox x:Name="ConcurrencyBox" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Left" Margin="0,0,0,14" />
+                                <TextBlock Grid.Row="2" Text="Tamanho do bloco (MiB)" VerticalAlignment="Center" Margin="0,0,0,14" />
+                                <ComboBox x:Name="ChunkBox" Grid.Row="2" Grid.Column="1" HorizontalAlignment="Left" Margin="0,0,0,14" />
+                                <TextBlock Grid.Row="3" Text="Tentativas por falha" VerticalAlignment="Center" Margin="0,0,0,14" />
+                                <TextBox x:Name="RetriesBox" Grid.Row="3" Grid.Column="1" Width="80" HorizontalAlignment="Left" Margin="0,0,0,14" />
+                                <TextBlock Grid.Row="4" Text="Permissão de acesso" VerticalAlignment="Center" Margin="0,0,0,14" />
+                                <CheckBox x:Name="FullScopeBox" Grid.Row="4" Grid.Column="1" Content="Ver todas as pastas do Drive" Margin="0,0,0,14" />
+                                <Button Grid.Row="5" Grid.ColumnSpan="2" HorizontalAlignment="Left" Style="{StaticResource Primary}" Content="Salvar configurações" Click="SaveSettings_Click" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Section}" Text="Notificações WhatsApp" Margin="0,0,0,6" />
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,10"
+                                           Text="Quando todos os uploads de uma pasta terminam, cada número recebe &quot;PASTA UPLOAD FINALIZADO&quot; pelo CallMeBot." />
+                                <CheckBox x:Name="WhatsAppEnabled" Content="Enviar notificação ao finalizar upload" Margin="0,0,0,10" />
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="2*" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="PhoneBox" ToolTip="DDI + DDD + número, como o WhatsApp registra (ex.: 554899494404, muitas vezes sem o 9)" />
+                                    <TextBox x:Name="ApiKeyBox" Grid.Column="2" ToolTip="Apikey recebida do CallMeBot" />
+                                    <Button Grid.Column="3" Content="Adicionar número" Margin="8,0,0,0" Click="AddPhone_Click" />
+                                </Grid>
+                                <TextBlock Style="{StaticResource Muted}" Margin="0,0,0,8"
+                                           Text="Número: DDI + DDD + número, como o WhatsApp registra (ex.: 554899494404, muitas vezes sem o 9). Ao lado, a apikey." />
+                                <ListBox x:Name="PhoneList" Height="110" BorderBrush="{DynamicResource Border}" BorderThickness="1" />
+                                <WrapPanel Margin="0,10,0,0">
+                                    <Button Content="Enviar teste" Click="TestWhatsApp_Click" />
+                                    <Button Content="Remover selecionado" Click="RemovePhone_Click" />
+                                    <Button Style="{StaticResource Primary}" Content="Salvar notificações" Click="SaveWhatsApp_Click" />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Section}" Text="Conta e dados" Margin="0,0,0,8" />
+                                <TextBlock x:Name="ClientNote" Style="{StaticResource Muted}" Margin="0,0,0,8"
+                                           Text="Conectar conta pede o JSON OAuth (Aplicativo para computador) do Google Cloud." />
+                                <Button HorizontalAlignment="Left" Content="Usar outro JSON OAuth…" Click="ImportClient_Click" Margin="0,0,0,10" />
+                                <TextBlock x:Name="DataDirText" Style="{StaticResource Muted}" Margin="0,0,0,8" />
+                                <Button HorizontalAlignment="Left" Content="Abrir pasta de dados" Click="OpenDataDir_Click" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Atividade -->
+                <DockPanel x:Name="ActivityPage" Grid.Row="1" Visibility="Collapsed">
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource Title}" Text="Atividade" />
+                    <WrapPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                        <Button Content="Exportar eventos…" Click="ExportEvents_Click" />
+                    </WrapPanel>
+                    <TextBox x:Name="ActivityText" IsReadOnly="True" FontFamily="Cascadia Mono, Consolas" FontSize="12"
+                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" />
+                </DockPanel>
+            </Grid>
+        </Grid>
+
+        <!-- Rodapé -->
+        <DockPanel Grid.Row="3" Background="{DynamicResource Navy}">
+            <TextBlock x:Name="VersionText" DockPanel.Dock="Right" Foreground="{DynamicResource OnNavyMuted}" FontSize="12" VerticalAlignment="Center" Margin="0,0,14,0" />
+            <TextBlock x:Name="StatusText" Foreground="{DynamicResource OnNavyMuted}" FontSize="12" VerticalAlignment="Center" Margin="14,0,0,0"
+                       TextTrimming="CharacterEllipsis" />
+        </DockPanel>
+    </Grid>
+</Window>

@@ -13,4 +13,24 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - run: dotnet test --configuration Release
+      - run: dotnet test tests/DriveFlow.Core.Tests --configuration Release
+
+  windows:
+    # Compila a janela e abre o pacote publicado no modo de teste rápido.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet publish src/DriveFlow.App -c Release -o publish/DriveFlow
+      - name: Teste rápido do pacote
+        shell: pwsh
+        run: |
+          $out = Join-Path $PWD 'smoke.json'
+          $p = Start-Process publish/DriveFlow/DriveFlow.exe -ArgumentList '--smoke-test', $out -PassThru
+          if (-not $p.WaitForExit(60000)) { $p.Kill(); throw 'O DriveFlow não fechou no teste rápido.' }
+          if (-not (Test-Path $out)) { throw 'O teste rápido não gravou o resultado.' }
+          $result = Get-Content $out | ConvertFrom-Json
+          $result | Format-List
+          if (-not $result.ok) { throw 'Teste rápido falhou.' }

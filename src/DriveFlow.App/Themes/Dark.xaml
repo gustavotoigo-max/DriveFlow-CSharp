@@ -1,0 +1,34 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Identidade Nexotool, tema escuro. Os nomes batem com theme.py. -->
+    <SolidColorBrush x:Key="Bg" Color="#0A1222" />
+    <SolidColorBrush x:Key="Surface" Color="#111B2E" />
+    <SolidColorBrush x:Key="Alt" Color="#16223A" />
+    <SolidColorBrush x:Key="Border" Color="#24324E" />
+    <SolidColorBrush x:Key="Strong" Color="#33456A" />
+    <SolidColorBrush x:Key="HoverBorder" Color="#4E6390" />
+    <SolidColorBrush x:Key="Text" Color="#E6ECF5" />
+    <SolidColorBrush x:Key="Muted" Color="#A9B5C9" />
+    <SolidColorBrush x:Key="Subtle" Color="#8090A8" />
+    <SolidColorBrush x:Key="Disabled" Color="#5D6B84" />
+    <SolidColorBrush x:Key="Accent" Color="#3B82F6" />
+    <SolidColorBrush x:Key="AccentHover" Color="#1D4ED8" />
+    <SolidColorBrush x:Key="AccentPressed" Color="#1E40AF" />
+    <SolidColorBrush x:Key="Soft" Color="#14294F" />
+    <SolidColorBrush x:Key="Selection" Color="#1D3B72" />
+    <SolidColorBrush x:Key="Success" Color="#22C55E" />
+    <SolidColorBrush x:Key="Danger" Color="#F87171" />
+    <SolidColorBrush x:Key="Navy" Color="#0B1733" />
+    <SolidColorBrush x:Key="Navy2" Color="#132447" />
+    <SolidColorBrush x:Key="Navy3" Color="#1E3260" />
+    <SolidColorBrush x:Key="OnNavy" Color="#F8FAFC" />
+    <SolidColorBrush x:Key="OnNavyMuted" Color="#94A3B8" />
+    <LinearGradientBrush x:Key="AccentGradient" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#3B82F6" Offset="0" />
+        <GradientStop Color="#22D3EE" Offset="1" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="DoneGradient" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#0D9488" Offset="0" />
+        <GradientStop Color="#2DD4BF" Offset="1" />
+    </LinearGradientBrush>
+</ResourceDictionary>
