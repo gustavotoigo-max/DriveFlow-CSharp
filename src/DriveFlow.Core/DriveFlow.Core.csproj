@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
+  </ItemGroup>
+
+  <!-- Cliente OAuth de Aplicativo para computador, fora do Git; sem ele o app pede o JSON. -->
+  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)..\..\oauth_client.json')">
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\..\oauth_client.json" LogicalName="DriveFlow.oauth_client.json" />
+  </ItemGroup>
+
+</Project>
