@@ -124,7 +124,8 @@ public sealed class AuthTests : IDisposable
                 // O "navegador" volta para o DriveFlow com o código.
                 _ = Task.Run(async () =>
                 {
-                    using var browser = new HttpClient();
+                    // Sem proxy: no Windows o proxy do sistema pode interceptar 127.0.0.1.
+                    using var browser = new HttpClient(new HttpClientHandler { UseProxy = false });
                     await browser.GetStringAsync($"{query["redirect_uri"]}favicon.ico");
                     await browser.GetStringAsync($"{query["redirect_uri"]}?code=abc&state={Uri.EscapeDataString(query["state"])}");
                 });

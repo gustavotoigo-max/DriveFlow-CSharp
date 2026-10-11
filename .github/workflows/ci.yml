@@ -23,6 +23,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+      - name: Testes no Windows
+        run: dotnet test tests/DriveFlow.Core.Tests -c Release --blame-hang-timeout 60s --logger "console;verbosity=normal"
       - run: dotnet publish src/DriveFlow.App -c Release -o publish/DriveFlow
       - name: Teste rápido do pacote
         shell: pwsh
