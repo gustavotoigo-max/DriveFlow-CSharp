@@ -29,7 +29,9 @@ jobs:
         run: |
           $out = Join-Path $PWD 'smoke.json'
           $p = Start-Process publish/DriveFlow/DriveFlow.exe -ArgumentList '--smoke-test', $out -PassThru
-          if (-not $p.WaitForExit(60000)) { $p.Kill(); throw 'O DriveFlow não fechou no teste rápido.' }
+          $closed = $p.WaitForExit(60000)
+          if (Test-Path $out) { Get-Content $out }
+          if (-not $closed) { $p.Kill(); throw 'O DriveFlow não fechou no teste rápido.' }
           if (-not (Test-Path $out)) { throw 'O teste rápido não gravou o resultado.' }
           $result = Get-Content $out | ConvertFrom-Json
           $result | Format-List

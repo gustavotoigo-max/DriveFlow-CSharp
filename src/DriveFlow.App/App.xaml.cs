@@ -36,9 +36,29 @@ public partial class App : Application
         }
         DispatcherUnhandledException += (_, args) =>
         {
-            Dialogs.Message(MainWindow, $"Erro inesperado: {args.Exception.Message}");
             args.Handled = true;
+            // No teste rápido não há quem feche um aviso: grava o erro e sai.
+            if (smokeOutput is not null) FailSmoke(smokeOutput, args.Exception);
+            else Dialogs.Message(MainWindow, $"Erro inesperado: {args.Exception.Message}");
         };
+        try
+        {
+            Open(smokeOutput, smokeDir);
+        }
+        catch (Exception exc) when (smokeOutput is not null)
+        {
+            FailSmoke(smokeOutput, exc);
+        }
+    }
+
+    void FailSmoke(string output, Exception exc)
+    {
+        File.WriteAllText(output, JsonSerializer.Serialize(new { ok = false, error = exc.ToString() }));
+        Shutdown(2);
+    }
+
+    void Open(string? smokeOutput, string? smokeDir)
+    {
         var vault = new DpapiVault();
         var db = new Database(vault);
         ThemeManager.Apply(db.Setting("theme", "Automático"));
@@ -59,7 +79,7 @@ public partial class App : Application
                 }));
                 window.ForceClose();
                 db.Dispose();
-                try { Directory.Delete(smokeDir!, true); } catch (IOException) { }
+                try { Directory.Delete(smokeDir!, true); } catch (Exception exc) when (exc is IOException or UnauthorizedAccessException) { }
             };
             timer.Start();
         }
