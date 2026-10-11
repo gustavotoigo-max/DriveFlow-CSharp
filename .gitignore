@@ -1,0 +1,12 @@
+bin/
+obj/
+.vs/
+*.user
+TestResults/
+publish/
+# Cliente OAuth embutido no build: fica só na máquina de quem compila.
+oauth_client*.json
+client_secret*.json
+credentials*.json
+*.sqlite*
+*.log
