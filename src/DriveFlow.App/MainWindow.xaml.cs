@@ -1,12 +1,17 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using DriveFlow.Core;
 using DriveFlow.Core.Auth;
@@ -18,10 +23,43 @@ using Microsoft.Win32;
 
 namespace DriveFlow.App;
 
+/// <summary>Ícones da versão Python (pasta Assets), pintados pelo tema na tela.</summary>
+public static class Icons
+{
+    public static readonly ImageSource Transfers = TintedIcon.Asset("transferencias_24px.png");
+    public static readonly ImageSource Charts = TintedIcon.Asset("graficos.png");
+    public static readonly ImageSource History = TintedIcon.Asset("historico_24px.png");
+    public static readonly ImageSource Settings = TintedIcon.Asset("config_24px.png");
+    public static readonly ImageSource Activity = TintedIcon.Asset("lista_24px.png");
+    public static readonly ImageSource Back = TintedIcon.Asset("voltar.png");
+    public static readonly ImageSource Refresh = TintedIcon.Asset("atualizar.png");
+    public static readonly ImageSource NewFolder = TintedIcon.Asset("nova_pasta.png");
+    public static readonly ImageSource Play = TintedIcon.Asset("play_24px.png");
+    public static readonly ImageSource Pause = TintedIcon.Asset("pausa_24px.png");
+    public static readonly ImageSource Stop = TintedIcon.Asset("stop.png");
+    public static readonly ImageSource Remove = TintedIcon.Asset("remover.png");
+}
+
+/// <summary>Configuração do monitoramento remoto, mesmo formato da versão Python.</summary>
+public sealed record RemoteMonitoring(
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("computer_id")] string ComputerId,
+    [property: JsonPropertyName("computer_name")] string ComputerName,
+    [property: JsonPropertyName("update_interval_seconds")] int UpdateIntervalSeconds,
+    [property: JsonPropertyName("firebase_credentials")] string FirebaseCredentials)
+{
+    public static RemoteMonitoring Default() =>
+        new(false, Guid.NewGuid().ToString("N"), Environment.MachineName, 5, "config/firebase-service-account.json");
+}
+
 public partial class MainWindow : Window
 {
     public static string Version => Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "";
+    public const string AdvancedTip = "Para HD: compactação e upload nunca rodam juntos. Quando um volume fica pronto, "
+        + "o WinRAR pausa, o volume sobe em velocidade total e a compactação continua. "
+        + "O disco lê ou grava uma coisa por vez, com menos movimento da cabeça de leitura.";
     const string DefaultStatus = "Fila salva neste computador";
+    const string SafeError = "A operação falhou. Verifique a conexão e a conta.";
 
     readonly Database db;
     readonly GoogleAuth auth;
@@ -30,15 +68,13 @@ public partial class MainWindow : Window
     readonly HttpClient plain = new();
     readonly ObservableCollection<QueueRow> queue = [];
     readonly ObservableCollection<HistoryRow> history = [];
-    readonly ObservableCollection<SourceRow> sources = [];
-    readonly ObservableCollection<FolderNode> roots = [];
-    readonly ObservableCollection<string> phones = [];
-    readonly List<(string Phone, string ApiKey)> recipients = [];
+    readonly ObservableCollection<PhoneRow> phones = [];
     readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(500) };
+    readonly DispatcherTimer folderTimer = new() { Interval = TimeSpan.FromSeconds(30) };
     HashSet<string> completedIds;
+    HashSet<string> duplicateWarned;
     DriveClient? drive;
-    FolderNode? destination;
-    bool authBusy, closing, forceClose;
+    bool authBusy, closing, forceClose, loadingSettings;
     int statusToken;
 
     public MainWindow(Database db, GoogleAuth auth, UploadManager manager)
@@ -46,21 +82,28 @@ public partial class MainWindow : Window
         InitializeComponent();
         (this.db, this.auth, this.manager) = (db, auth, manager);
         notifier = new Notifier(db, plain);
-        completedIds = db.All().Where(x => x.Status == Status.Done).Select(x => x.Id).ToHashSet();
+        var rows = db.All();
+        completedIds = rows.Where(x => x.Status == Status.Done).Select(x => x.Id).ToHashSet();
+        duplicateWarned = rows.Where(x => x.Status == Status.DuplicateName).Select(x => x.Id).ToHashSet();
         QueueList.ItemsSource = queue;
         HistoryList.ItemsSource = history;
-        SourceList.ItemsSource = sources;
-        FolderTree.ItemsSource = roots;
         PhoneList.ItemsSource = phones;
+        LocalTree.ItemsSource = localRoots;
+        FolderTree.ItemsSource = driveRoots;
         VersionText.Text = $"v{Version}";
         ConnectButton.Content = LoginText;
         DataDirText.Text = $"Dados protegidos pelo Windows:\n{Database.DataDir()}";
         ClientNote.Visibility = OAuthClient.Bundled() is null ? Visibility.Visible : Visibility.Collapsed;
+        UnitsIcon.Source = ShellIcons.ForPath((Environment.GetEnvironmentVariable("SystemDrive") ?? "C:") + "\\");
         LoadSettings();
+        UpdateCompressButton();
         ShowStatus(DefaultStatus);
         StateChanged += (_, _) => MaximizeButton.Content = WindowState == WindowState.Maximized ? "" : "";
         timer.Tick += (_, _) => Refresh();
         timer.Start();
+        folderTimer.Tick += (_, _) => RefreshWatchedFolders();
+        folderTimer.Start();
+        NavigateLocal("");
         Refresh();
         if (File.Exists(Path.Combine(Database.DataDir(), "account.bin")))
             _ = AuthTask(() => auth.Restore());
@@ -86,6 +129,13 @@ public partial class MainWindow : Window
         }
     }
 
+    static bool Expected(Exception exc) =>
+        exc is AuthException or DriveException or TemporaryException or IOException or InvalidOperationException
+            or ArgumentException or HttpRequestException or TaskCanceledException or UnauthorizedAccessException;
+
+    /// <summary>Mensagem que pode ir para a tela: erros de conta e de validação; o resto vira um aviso genérico.</summary>
+    static string Friendly(Exception exc) => exc is AuthException or ArgumentException or InvalidOperationException ? exc.Message : SafeError;
+
     /// <summary>Roda uma operação de rede sem travar a janela e mostra o erro, se houver.</summary>
     async Task<T?> Try<T>(Func<Task<T>> work, bool silent = false)
     {
@@ -93,9 +143,10 @@ public partial class MainWindow : Window
         {
             return await work();
         }
-        catch (Exception exc) when (exc is AuthException or DriveException or TemporaryException or IOException or InvalidOperationException or ArgumentException)
+        catch (Exception exc) when (Expected(exc))
         {
-            if (!silent) Notice(exc.Message);
+            db.Event("", exc is AuthException ? exc.Message : $"BACKGROUND_ERROR type={exc.GetType().Name}");
+            if (!silent) Notice(Friendly(exc));
             return default;
         }
     }
@@ -120,6 +171,7 @@ public partial class MainWindow : Window
         {
             authBusy = false;
             ConnectButton.IsEnabled = true;
+            UpdateConnectionDot();
         }
     }
 
@@ -132,11 +184,28 @@ public partial class MainWindow : Window
     void Nav_Checked(object sender, RoutedEventArgs e)
     {
         if (TransfersPage is null || db is null) return;
-        TransfersPage.Visibility = NavTransfers.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
-        HistoryPage.Visibility = NavHistory.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
-        SettingsPage.Visibility = NavSettings.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
-        ActivityPage.Visibility = NavActivity.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        static Visibility Show(RadioButton nav) => nav.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        TransfersPage.Visibility = Show(NavTransfers);
+        ChartsPage.Visibility = Show(NavCharts);
+        HistoryPage.Visibility = Show(NavHistory);
+        SettingsPage.Visibility = Show(NavSettings);
+        ActivityPage.Visibility = Show(NavActivity);
         Refresh();
+    }
+
+    /// <summary>Teste rápido do pacote: abre cada página em cada tema para os modelos de tela serem montados.</summary>
+    public void SmokeTour()
+    {
+        foreach (var theme in ThemeManager.Themes.Reverse())
+        {
+            ThemeManager.Apply(theme);
+            foreach (var nav in new[] { NavCharts, NavHistory, NavSettings, NavActivity, NavTransfers })
+            {
+                nav.IsChecked = true;
+                UpdateLayout();
+            }
+        }
+        ThemeManager.Apply(db.Setting("theme", "Automático"));
     }
 
     public void ForceClose()
@@ -153,6 +222,7 @@ public partial class MainWindow : Window
             manager.Closed = true;
             manager.PauseAll();
             timer.Stop();
+            folderTimer.Stop();
             return;
         }
         if (manager.RunningCount > 0)
@@ -173,10 +243,18 @@ public partial class MainWindow : Window
         manager.Closed = true;
         manager.PauseAll();
         timer.Stop();
+        folderTimer.Stop();
         db.Event("", "APPLICATION_CLOSED");
     }
 
     // ---- Conta
+
+    void UpdateConnectionDot()
+    {
+        var connected = auth.AccountId != "";
+        ConnectionDot.Fill = new SolidColorBrush(connected ? Color.FromRgb(0x22, 0xC5, 0x5E) : Color.FromRgb(0xDF, 0x66, 0x66));
+        ConnectionDot.ToolTip = connected ? "Conta autenticada" : "Conta desconectada";
+    }
 
     async void Connect_Click(object sender, RoutedEventArgs e)
     {
@@ -192,12 +270,14 @@ public partial class MainWindow : Window
             auth.Logout();
             drive = null;
             destination = null;
-            roots.Clear();
+            ClearDriveTree();
             DrivePath.Text = "Meu Drive";
             DestinationText.Text = "Conecte a conta.";
+            DestinationText.ClearValue(TextBlock.ForegroundProperty);
+            DestinationText.ClearValue(TextBlock.FontWeightProperty);
             AccountText.Text = "Desconectado";
             AccountText.ToolTip = null;
-            ConnectionDot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "OnNavyMuted");
+            UpdateConnectionDot();
             ConnectButton.Content = LoginText;
             db.Event("", "ACCOUNT_DISCONNECTED_LOCALLY");
             return;
@@ -240,172 +320,437 @@ public partial class MainWindow : Window
         drive = new DriveClient(auth.CreateClient());
         destination = null;
         DestinationText.Text = "Escolha a pasta de destino.";
+        DestinationText.ClearValue(TextBlock.ForegroundProperty);
+        DestinationText.ClearValue(TextBlock.FontWeightProperty);
         AccountText.Text = "Conectado";
         AccountText.ToolTip = auth.Email;
-        ConnectionDot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "Success");
+        UpdateConnectionDot();
         ConnectButton.Content = "Desconectar";
         db.SaveAccount(auth.AccountId, auth.Email);
         db.Event("", "ACCOUNT_CONNECTED");
         ShowStatus(DefaultStatus);
-        ResetTree();
+        ClearDriveTree();
+        ResetDriveTree();
     }
 
-    // ---- Árvore do Drive
+    // ---- Arquivos locais (FileBrowser da versão Python)
 
-    void ResetTree()
+    readonly ObservableCollection<LocalNode> localRoots = [];
+    readonly HashSet<string> checkedPaths = new(StringComparer.OrdinalIgnoreCase);
+    string localRoot = "";
+
+    sealed record LocalEntry(string Path, string Name, bool IsDir, long Size);
+
+    static List<LocalEntry> ListLocal(string path)
     {
-        roots.Clear();
-        if (drive is null) return;
-        var root = new FolderNode("root", "Meu Drive", null, LoadChildren);
-        roots.Add(root);
-        root.IsExpanded = true;
-        root.IsSelected = true;
+        if (path == "")
+        {
+            var drives = new List<LocalEntry>();
+            foreach (var unit in DriveInfo.GetDrives())
+            {
+                var letter = unit.Name.TrimEnd('\\');
+                string label;
+                try { label = unit.IsReady && unit.VolumeLabel != "" ? $"{unit.VolumeLabel} ({letter})" : letter; }
+                catch (IOException) { label = letter; }
+                catch (UnauthorizedAccessException) { label = letter; }
+                drives.Add(new LocalEntry(unit.Name, label, true, 0));
+            }
+            return drives;
+        }
+        var entries = new List<LocalEntry>();
+        try
+        {
+            foreach (var info in new DirectoryInfo(path).EnumerateFileSystemInfos())
+            {
+                // Como o Explorer sem "itens ocultos": arquivos ocultos e do sistema ficam de fora.
+                if ((info.Attributes & (FileAttributes.Hidden | FileAttributes.System)) != 0) continue;
+                var dir = (info.Attributes & FileAttributes.Directory) != 0;
+                entries.Add(new LocalEntry(info.FullName, info.Name, dir, dir ? 0 : ((FileInfo)info).Length));
+            }
+        }
+        catch (Exception exc) when (exc is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+        }
+        return entries.OrderBy(x => !x.IsDir).ThenBy(x => x.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
     }
 
-    async Task LoadChildren(FolderNode node)
+    LocalNode MakeLocal(LocalEntry entry) =>
+        new(entry.Path, entry.Name, entry.IsDir, entry.Size, LoadLocalChildren, LocalCheckChanged, checkedPaths.Contains(entry.Path));
+
+    async void LoadLocalChildren(LocalNode node)
     {
-        if (drive is null) return;
-        var folders = await Try(() => drive.Folders(node.Id), silent: true);
+        var entries = await Task.Run(() => ListLocal(node.Path));
         node.Children.Clear();
-        if (folders is null)
+        foreach (var entry in entries) node.Children.Add(MakeLocal(entry));
+    }
+
+    async void NavigateLocal(string path)
+    {
+        if (path != "" && !Directory.Exists(path))
         {
-            ShowStatus("Não foi possível listar as pastas do Drive. Clique em Atualizar.", 8000);
+            LocalPath.ToolTip = "Pasta não encontrada.";
             return;
         }
-        foreach (var folder in folders)
-            node.Children.Add(new FolderNode(folder.Id, folder.Name, node, LoadChildren) { IsDestination = folder.Id == destination?.Id });
+        LocalPath.ToolTip = null;
+        localRoot = path;
+        LocalPath.Text = path;
+        var entries = await Task.Run(() => ListLocal(path));
+        if (localRoot != path) return;
+        localRoots.Clear();
+        foreach (var entry in entries) localRoots.Add(MakeLocal(entry));
     }
 
-    FolderNode? SelectedFolder => FolderTree.SelectedItem as FolderNode;
+    void Units_Click(object sender, RoutedEventArgs e) => NavigateLocal("");
 
-    void FolderTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e) =>
-        DrivePath.Text = SelectedFolder?.FullName ?? "Meu Drive";
-
-    void FolderTree_DoubleClick(object sender, MouseButtonEventArgs e) => ChooseFolder_Click(sender, e);
-
-    void DriveBack_Click(object sender, RoutedEventArgs e)
+    void LocalUp_Click(object sender, RoutedEventArgs e)
     {
-        if (SelectedFolder?.Parent is { } parent) parent.IsSelected = true;
+        var path = LocalPath.Text.Trim();
+        var parent = path == "" ? null : Path.GetDirectoryName(path.TrimEnd('\\') + (path.EndsWith(":\\") || path.EndsWith(':') ? "\\" : ""));
+        NavigateLocal(parent ?? "");
     }
 
-    void DriveRefresh_Click(object sender, RoutedEventArgs e)
+    void LocalPath_KeyDown(object sender, KeyEventArgs e)
     {
-        if (drive is null) return;
-        if (roots.Count == 0) ResetTree();
-        else (SelectedFolder ?? roots[0]).Invalidate();
+        if (e.Key == Key.Enter) NavigateLocal(LocalPath.Text.Trim());
     }
 
-    void ChooseFolder_Click(object sender, RoutedEventArgs e)
+    void LocalCheckChanged(LocalNode node, bool value)
     {
-        if (drive is null)
-        {
-            Notice("Conecte sua conta Google primeiro.");
-            return;
-        }
-        if (SelectedFolder is not { } folder) return;
-        foreach (var node in roots.SelectMany(r => r.Descendants())) node.IsDestination = node.Id == folder.Id;
-        destination = folder;
-        DestinationText.Text = "✓  Destino: " + folder.FullName;
-        DestinationText.SetResourceReference(TextBlock.ForegroundProperty, "Success");
+        if (value) checkedPaths.Add(node.Path);
+        else checkedPaths.Remove(node.Path);
+        UpdateLocalSummary();
     }
 
-    async void NewFolder_Click(object sender, RoutedEventArgs e)
+    IEnumerable<LocalNode> VisibleLocal() => localRoots.SelectMany(n => n.Descendants());
+
+    void SetChecked(string path, bool value)
     {
-        if (drive is null)
-        {
-            Notice("Conecte sua conta Google primeiro.");
-            return;
-        }
-        var parent = SelectedFolder ?? roots.FirstOrDefault();
-        if (parent is null) return;
-        var name = Dialogs.GetText(this, "Nova pasta no Drive", "Nome da pasta:")?.Trim();
-        if (string.IsNullOrEmpty(name)) return;
-        if (await Try(() => drive.CreateFolder(parent.Id, name)) is not null)
-        {
-            parent.IsExpanded = true;
-            parent.Invalidate();
-        }
+        if (value) checkedPaths.Add(path);
+        else checkedPaths.Remove(path);
+        foreach (var node in VisibleLocal().Where(n => string.Equals(n.Path, path, StringComparison.OrdinalIgnoreCase)))
+            node.ShowChecked(value);
+        UpdateLocalSummary();
     }
 
-    void RefreshFolder(string folderId)
+    List<string> CheckedFolders() => checkedPaths.Where(Directory.Exists).Order(StringComparer.OrdinalIgnoreCase).ToList();
+
+    void UpdateLocalSummary()
     {
-        foreach (var node in roots.SelectMany(r => r.Descendants()).ToList())
-            if (node.Id == folderId && node.IsExpanded) node.Invalidate();
+        var folders = CheckedFolders().Count;
+        var files = checkedPaths.Count - folders;
+        var parts = new List<string>();
+        if (files > 0) parts.Add($"{files} arquivo(s)");
+        if (folders > 0) parts.Add($"{folders} pasta(s)");
+        LocalSummary.Text = parts.Count > 0 ? string.Join(" e ", parts) + " selecionado(s)" : "Nada selecionado";
     }
 
-    // ---- Origem
-
-    void AddFiles_Click(object sender, RoutedEventArgs e)
+    void PickFiles_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFileDialog { Title = "Arquivos para enviar", Multiselect = true };
+        var dialog = new OpenFileDialog { Title = "Selecionar arquivos", Multiselect = true, Filter = "Todos os arquivos (*)|*.*" };
         if (dialog.ShowDialog(this) != true) return;
-        foreach (var path in dialog.FileNames)
-            if (sources.All(s => s.Path != path)) sources.Add(new SourceRow(path, false));
-    }
-
-    void AddFolder_Click(object sender, RoutedEventArgs e)
-    {
-        var dialog = new OpenFolderDialog { Title = "Pasta para enviar (com subpastas)", Multiselect = true };
-        if (dialog.ShowDialog(this) != true) return;
-        foreach (var path in dialog.FolderNames)
-            if (sources.All(s => s.Path != path)) sources.Add(new SourceRow(path, true));
+        foreach (var path in dialog.FileNames) SetChecked(path, true);
     }
 
     void ClearSelection_Click(object sender, RoutedEventArgs e)
     {
-        var selected = SourceList.SelectedItems.Cast<SourceRow>().ToList();
-        foreach (var row in selected.Count > 0 ? selected : sources.ToList()) sources.Remove(row);
+        checkedPaths.Clear();
+        foreach (var node in VisibleLocal()) node.ShowChecked(false);
+        UpdateLocalSummary();
     }
 
-    /// <summary>Põe os arquivos e pastas escolhidos na fila. Falso quando falta destino.</summary>
+    // ---- Árvore do Drive (drive_tree.py)
+
+    readonly ObservableCollection<DriveNode> driveRoots = [];
+    readonly Dictionary<string, DriveNode> driveNodes = [];
+    readonly HashSet<string> driveLoaded = [], driveLoading = [], reloadPending = [];
+    (string Id, string Name)? destination;
+    int generation;
+
+    void ClearDriveTree()
+    {
+        generation++;
+        driveRoots.Clear();
+        driveNodes.Clear();
+        driveLoaded.Clear();
+        driveLoading.Clear();
+        reloadPending.Clear();
+    }
+
+    void ResetDriveTree()
+    {
+        ClearDriveTree();
+        if (drive is null) return;
+        var root = new DriveNode("root", "Meu Drive", DriveFile.FolderType, null, null, n => _ = LoadDrive(n));
+        driveRoots.Add(root);
+        driveNodes["root"] = root;
+        MarkDestination();
+        root.IsSelected = true;
+        root.IsExpanded = true;
+    }
+
+    async Task LoadDrive(DriveNode node, bool force = false, bool silent = false)
+    {
+        if (!node.IsFolder || drive is null) return;
+        var (id, gen, client) = (node.Id, generation, drive);
+        if (driveLoading.Contains(id))
+        {
+            if (force) reloadPending.Add(id);
+            return;
+        }
+        if (driveLoaded.Contains(id) && !force) return;
+        driveLoading.Add(id);
+        node.Tip = "Carregando…";
+        List<DriveFile>? rows = null;
+        Exception? error = null;
+        try
+        {
+            rows = await client.Children(id);
+        }
+        catch (Exception exc) when (Expected(exc))
+        {
+            error = exc;
+        }
+        if (gen != generation || !driveNodes.TryGetValue(id, out var current) || current != node) return;
+        driveLoading.Remove(id);
+        if (rows is null)
+        {
+            db.Event("", error is AuthException ? error.Message : $"BACKGROUND_ERROR type={error?.GetType().Name}");
+            node.Tip = "Falha ao carregar. Clique em Atualizar.";
+            node.ForgetLoaded();
+            if (!silent) Notice(Friendly(error!));
+            // Um pedido de atualização chegou durante a falha: tenta uma vez, sem laço.
+            if (reloadPending.Remove(id)) await LoadDrive(node, force: true);
+            return;
+        }
+        driveLoaded.Add(id);
+        node.Tip = "";
+        // Reconcilia pelo ID para manter pastas abertas e a seleção.
+        foreach (var stale in node.Children.Where(c => c.Id == "" || !rows.Any(r => r.Id == c.Id)).ToList())
+        {
+            ForgetDrive(stale);
+            node.Children.Remove(stale);
+        }
+        for (var position = 0; position < rows.Count; position++)
+        {
+            var row = rows[position];
+            var child = node.Children.FirstOrDefault(c => c.Id == row.Id);
+            if (child is null)
+            {
+                child = DriveNode.From(row, node, n => _ = LoadDrive(n));
+                node.Children.Insert(Math.Min(position, node.Children.Count), child);
+            }
+            else
+            {
+                child.Update(row.Name, row.MimeType, row.Size);
+                var index = node.Children.IndexOf(child);
+                if (index != position && position < node.Children.Count) node.Children.Move(index, position);
+            }
+            driveNodes[row.Id] = child;
+        }
+        MarkDestination();
+        FolderSelected();
+        if (reloadPending.Remove(id)) await LoadDrive(node, force: true);
+    }
+
+    void ForgetDrive(DriveNode node)
+    {
+        foreach (var child in node.Children) ForgetDrive(child);
+        if (node.Id == "") return;
+        driveNodes.Remove(node.Id);
+        driveLoaded.Remove(node.Id);
+    }
+
+    void MarkDestination()
+    {
+        foreach (var node in driveNodes.Values) node.IsDestination = node.Id == destination?.Id;
+    }
+
+    /// <summary>A pasta aberta: a selecionada ou, num arquivo, a pasta dele.</summary>
+    DriveNode? CurrentFolder()
+    {
+        var node = FolderTree.SelectedItem as DriveNode;
+        return node is { IsFolder: false } ? node.Parent : node;
+    }
+
+    void FolderSelected() => DrivePath.Text = CurrentFolder()?.FullName ?? "Meu Drive";
+
+    void FolderTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e) => FolderSelected();
+
+    void FolderTree_DoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        // Duplo clique numa pasta também a escolhe como destino.
+        if (FolderTree.SelectedItem is DriveNode { IsFolder: true, Id.Length: > 0 }) ChooseFolder_Click(sender, e);
+    }
+
+    void DriveBack_Click(object sender, RoutedEventArgs e)
+    {
+        if (CurrentFolder()?.Parent is { } parent) parent.IsSelected = true;
+    }
+
+    void DriveRefresh_Click(object sender, RoutedEventArgs e)
+    {
+        if (auth.AccountId == "" || drive is null) return;
+        if (driveNodes.Count == 0)
+        {
+            ResetDriveTree();
+            return;
+        }
+        // Atualiza todas as pastas já abertas, não só a selecionada.
+        foreach (var id in driveLoaded.Append("root").Distinct().ToList())
+            if (driveNodes.TryGetValue(id, out var node)) _ = LoadDrive(node, force: true);
+    }
+
+    void RefreshFolder(string folderId)
+    {
+        if (driveNodes.TryGetValue(folderId, out var node)) _ = LoadDrive(node, force: true);
+    }
+
+    /// <summary>A cada 30 s: só a pasta aberta e o destino, sem empilhar pedidos.</summary>
+    void RefreshWatchedFolders()
+    {
+        UpdateCompressButton();
+        if (auth.AccountId == "" || closing || authBusy) return;
+        var ids = new HashSet<string>();
+        if (destination is { } target) ids.Add(target.Id);
+        if (CurrentFolder() is { } current) ids.Add(current.Id);
+        foreach (var id in ids)
+            if (driveNodes.TryGetValue(id, out var node) && !driveLoading.Contains(id))
+                _ = LoadDrive(node, force: true, silent: true);
+    }
+
+    void ChooseFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if (auth.AccountId == "" || drive is null)
+        {
+            Notice("Conecte sua conta Google primeiro.");
+            return;
+        }
+        var folder = CurrentFolder() ?? driveRoots.FirstOrDefault();
+        if (folder is null) return;
+        destination = (folder.Id, folder.FullName);
+        DestinationText.Text = "✓  Destino: " + folder.FullName;
+        DestinationText.Foreground = new SolidColorBrush(Color.FromRgb(0x1D, 0xB9, 0x54));
+        DestinationText.FontWeight = FontWeights.SemiBold;
+        MarkDestination();
+    }
+
+    async void NewFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if (auth.AccountId == "" || drive is null)
+        {
+            Notice("Conecte sua conta Google primeiro.");
+            return;
+        }
+        var name = Dialogs.GetText(this, "Nova pasta no Drive", "Nome da pasta:")?.Trim();
+        if (string.IsNullOrEmpty(name)) return;
+        var parent = CurrentFolder()?.Id ?? "root";
+        var client = drive;
+        if (await Try(() => client.CreateFolder(parent, name)) is not null) RefreshFolder(parent);
+    }
+
+    // ---- Compactar (WinRAR): a compactação chega na próxima etapa da versão C#.
+
+    static string? FindWinRar()
+    {
+        var candidates = new List<string>();
+        void Read(RegistryKey hive, string key, string value)
+        {
+            try
+            {
+                using var handle = hive.OpenSubKey(key);
+                if (handle?.GetValue(value) is string path) candidates.Add(path);
+            }
+            catch (Exception exc) when (exc is System.Security.SecurityException or UnauthorizedAccessException or IOException)
+            {
+            }
+        }
+        Read(Registry.LocalMachine, @"SOFTWARE\WinRAR", "exe64");
+        Read(Registry.LocalMachine, @"SOFTWARE\WinRAR", "exe32");
+        Read(Registry.LocalMachine, @"SOFTWARE\WOW6432Node\WinRAR", "exe32");
+        Read(Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\WinRAR.exe", "");
+        Read(Registry.CurrentUser, @"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\WinRAR.exe", "");
+        foreach (var variable in new[] { "ProgramW6432", "ProgramFiles", "ProgramFiles(x86)" })
+            if (Environment.GetEnvironmentVariable(variable) is { Length: > 0 } folder)
+                candidates.Add(Path.Combine(folder, "WinRAR", "WinRAR.exe"));
+        return candidates.Select(c => c.Trim('"'))
+            .FirstOrDefault(c => Path.GetFileName(c).Equals("WinRAR.exe", StringComparison.OrdinalIgnoreCase) && File.Exists(c));
+    }
+
+    void UpdateCompressButton()
+    {
+        var winrar = FindWinRar();
+        CompressIcon.Source = winrar is null ? null : ShellIcons.ForPath(winrar);
+        CompressIcon.Visibility = CompressIcon.Source is null ? Visibility.Collapsed : Visibility.Visible;
+        CompressButton.IsEnabled = false;
+        CompressButton.ToolTip = winrar is null ? "WinRAR não encontrado neste computador" : "Compactar com o WinRAR: em breve na versão C#";
+        ToolTipService.SetShowOnDisabled(CompressButton, true);
+    }
+
+    void Compress_Click(object sender, RoutedEventArgs e) { }
+
+    // ---- Fila
+
     async Task<bool> Enqueue()
     {
-        if (destination is null || drive is null)
+        if (destination is not { } target || auth.AccountId == "" || drive is null)
         {
             Notice("Escolha a pasta de destino e clique em Usar esta pasta.");
             return false;
         }
+        if (checkedPaths.Count == 0)
+        {
+            Notice("Marque ao menos um arquivo ou pasta.");
+            return false;
+        }
+        var folders = CheckedFolders();
+        if (folders.Count > 0) EnqueueFolders(folders, target);
         var errors = new List<string>();
-        var account = auth.AccountId;
-        var (parentId, parentName) = (destination.Id, destination.FullName);
-        foreach (var row in sources.Where(s => !s.IsFolder).ToList())
+        var added = new List<string>();
+        foreach (var path in checkedPaths.Except(folders, StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList())
         {
             try
             {
-                var id = db.Add(row.Path, parentId, parentName, account);
+                var id = db.Add(path, target.Id, target.Name, auth.AccountId);
+                added.Add(path);
                 db.Event(id, "ADDED_TO_QUEUE");
-                sources.Remove(row);
             }
             catch (Exception exc) when (exc is IOException or ArgumentException or UnauthorizedAccessException)
             {
-                errors.Add($"{Path.GetFileName(row.Path)}: {exc.Message}");
+                errors.Add($"{Path.GetFileName(path)}: {exc.Message}");
             }
         }
-        var folders = sources.Where(s => s.IsFolder).ToList();
-        if (folders.Count > 0)
-        {
-            foreach (var row in folders) sources.Remove(row);
-            ShowStatus("Criando as pastas no Drive…", 8000);
-            var plan = await Try(() => FolderPlan.Build(drive, folders.Select(f => f.Path), parentId, parentName));
-            foreach (var file in plan ?? [])
-            {
-                try
-                {
-                    var id = db.Add(file.Path, file.FolderId, file.FolderName, account, notifyName: file.NotifyName);
-                    db.Event(id, "ADDED_TO_QUEUE_FROM_FOLDER");
-                }
-                catch (Exception exc) when (exc is IOException or ArgumentException or UnauthorizedAccessException)
-                {
-                    errors.Add($"{Path.GetFileName(file.Path)}: {exc.Message}");
-                }
-            }
-            RefreshFolder(parentId);
-        }
+        foreach (var path in added) SetChecked(path, false);
         if (errors.Count > 0) Notice(string.Join("\n", errors));
+        await Task.CompletedTask;
         return true;
     }
 
-    // ---- Fila
+    /// <summary>Pastas marcadas sobem com a mesma estrutura de subpastas no Drive.</summary>
+    async void EnqueueFolders(List<string> folders, (string Id, string Name) target)
+    {
+        var (account, client) = (auth.AccountId, drive!);
+        foreach (var folder in folders) SetChecked(folder, false);
+        ShowStatus("Criando as pastas no Drive…", 8000);
+        var plan = await Try(() => FolderPlan.Build(client, folders, target.Id, target.Name));
+        if (plan is null) return;
+        var errors = new List<string>();
+        foreach (var file in plan)
+        {
+            try
+            {
+                var id = db.Add(file.Path, file.FolderId, file.FolderName, account, notifyName: file.NotifyName);
+                db.Event(id, "ADDED_TO_QUEUE_FROM_FOLDER");
+                manager.Start(id);
+            }
+            catch (Exception exc) when (exc is IOException or ArgumentException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                errors.Add($"{Path.GetFileName(file.Path)}: {exc.Message}");
+            }
+        }
+        RefreshFolder(target.Id);
+        Refresh();
+        if (errors.Count > 0) Notice(string.Join("\n", errors));
+    }
 
     async void Start_Click(object sender, RoutedEventArgs e)
     {
@@ -414,7 +759,7 @@ public partial class MainWindow : Window
             Notice("Conecte sua conta Google primeiro.");
             return;
         }
-        if (sources.Count > 0 && !await Enqueue()) return;
+        if (checkedPaths.Count > 0 && !await Enqueue()) return;
         foreach (var item in db.All())
             if (item.Enabled && item.Account == auth.AccountId)
             {
@@ -430,7 +775,7 @@ public partial class MainWindow : Window
 
     void RowPlay_Click(object sender, RoutedEventArgs e)
     {
-        if (RowId(sender) is not { } id || db.Get(id) is not { } item) return;
+        if (RowId(sender) is not { } id || db.Get(id) is not { } item || manager.IsRemoving(id)) return;
         if (item.Status == Status.Canceled && !manager.IsRunning(id)) db.Update(id, new() { Status = Status.Paused });
         db.Update(id, new() { Enabled = true });
         try { manager.Start(id); }
@@ -445,7 +790,7 @@ public partial class MainWindow : Window
 
     void RowStop_Click(object sender, RoutedEventArgs e)
     {
-        if (RowId(sender) is { } id && Dialogs.Ask(this, "Cancelar upload", "Cancelar este envio?")) manager.Pause(id, cancel: true);
+        if (RowId(sender) is { } id) manager.Pause(id, cancel: true);
     }
 
     void RowRemove_Click(object sender, RoutedEventArgs e)
@@ -468,6 +813,18 @@ public partial class MainWindow : Window
     void QueueList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (SelectedQueueItem is { Error.Length: > 0 } item) ShowStatus(item.Error, 6000);
+    }
+
+    /// <summary>Botão direito seleciona a linha antes de abrir o menu.</summary>
+    void QueueList_RightButton(object sender, MouseButtonEventArgs e)
+    {
+        for (var element = e.OriginalSource as DependencyObject; element is not null; element = VisualTreeHelper.GetParent(element))
+            if (element is ListBoxItem item)
+            {
+                item.IsSelected = true;
+                return;
+            }
+        e.Handled = true;
     }
 
     void Rename_Click(object sender, RoutedEventArgs e)
@@ -496,6 +853,25 @@ public partial class MainWindow : Window
         catch (InvalidOperationException exc) { Notice(exc.Message); }
     }
 
+    /// <summary>Continuar só quando há envio já começado e parado; senão Iniciar.</summary>
+    string ContinueText(List<UploadItem> pending) =>
+        pending.Any(x => x.Status is not (Status.Done or Status.Canceled) && !manager.IsRunning(x.Id)
+                         && (x.Offset > 0 || x.RemoteId != "" || x.Elapsed > 0)) ? "Continuar" : "Iniciar";
+
+    void WarnDuplicates(List<UploadItem> pending)
+    {
+        var current = pending.Where(x => x.Status == Status.DuplicateName).ToList();
+        var fresh = current.Where(x => !duplicateWarned.Contains(x.Id)).ToList();
+        // Renomeado e de novo duplicado avisa outra vez.
+        duplicateWarned = current.Select(x => x.Id).ToHashSet();
+        if (fresh.Count == 0) return;
+        var names = string.Join("\n", fresh.Select(x => $"• {x.Name}  ({x.FolderName})"));
+        // Fora do Refresh: o aviso é modal e o timer continua rodando.
+        Dispatcher.BeginInvoke(() => Notice(
+            $"Já existe um arquivo com o mesmo nome na pasta de destino do Drive:\n{names}\n\n"
+            + "Renomeie o item na fila (botão direito) ou remova o arquivo do Drive e clique em Continuar."));
+    }
+
     void Refresh()
     {
         manager.Tick();
@@ -506,12 +882,17 @@ public partial class MainWindow : Window
         StatConfirmed.Text = Format.Size(rows.Sum(x => (double)x.Offset));
         StatSpeed.Text = Format.Size(rows.Sum(x => x.Speed)) + "/s";
         StatDone.Text = done.Count.ToString();
+        StartButton.Content = ContinueText(pending);
+        WarnDuplicates(pending);
         Sync(pending);
-        if (HistoryPage.Visibility == Visibility.Visible && (history.Count != done.Count || history.FirstOrDefault()?.Id != done.LastOrDefault()?.Id))
+        if (history.Count != done.Count || history.FirstOrDefault()?.Id != done.LastOrDefault()?.Id)
         {
+            var selected = (HistoryList.SelectedItem as HistoryRow)?.Id;
             history.Clear();
             foreach (var item in Enumerable.Reverse(done)) history.Add(new HistoryRow(item));
+            HistoryList.SelectedItem = history.FirstOrDefault(h => h.Id == selected);
         }
+        SampleCharts(rows);
         var newlyDone = done.Where(x => !completedIds.Contains(x.Id)).ToList();
         completedIds = done.Select(x => x.Id).ToHashSet();
         notifier.UploadsCompleted(rows, newlyDone);
@@ -548,8 +929,40 @@ public partial class MainWindow : Window
                 row = queue[index];
                 if (index != i) queue.Move(index, i);
             }
-            row.Load(item, removing: false);
+            row.Load(item, manager.IsRemoving(item.Id));
         }
+    }
+
+    // ---- Gráficos (charts.py)
+
+    readonly Dictionary<string, UploadPlot> plots = [];
+    readonly Stopwatch chartClock = Stopwatch.StartNew();
+    HashSet<string> lastActive = [];
+
+    void SampleCharts(IReadOnlyList<UploadItem> rows)
+    {
+        var byId = rows.ToDictionary(x => x.Id);
+        var active = rows.Where(x => manager.IsRunning(x.Id)).Select(x => x.Id).ToHashSet();
+        // Os últimos gráficos ficam até começar um novo lote.
+        var keep = active.Count > 0 ? active : lastActive;
+        if (active.Count > 0) lastActive = active;
+        foreach (var id in plots.Keys.ToList())
+            if (!keep.Contains(id) || !byId.ContainsKey(id))
+            {
+                ChartsGrid.Children.Remove(plots[id]);
+                plots.Remove(id);
+            }
+        foreach (var id in keep.Order())
+        {
+            if (!byId.TryGetValue(id, out var item)) continue;
+            if (!plots.TryGetValue(id, out var plot))
+            {
+                plots[id] = plot = new UploadPlot();
+                ChartsGrid.Children.Add(plot);
+            }
+            plot.Sample(chartClock.Elapsed.TotalSeconds, item);
+        }
+        ChartsEmpty.Visibility = plots.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     // ---- Histórico
@@ -592,97 +1005,194 @@ public partial class MainWindow : Window
     {
         if (!Dialogs.Ask(this, "Limpar histórico", "Limpar o histórico? Os arquivos no Drive continuam.")) return;
         foreach (var item in db.All().Where(x => x.Status == Status.Done)) db.Remove(item.Id);
-        history.Clear();
+        Refresh();
     }
 
     // ---- Configurações
 
+    static string Number(double value) => value.ToString("0.0", CultureInfo.InvariantCulture);
+
+    RemoteMonitoring Remote()
+    {
+        try { return db.Setting<RemoteMonitoring?>("remote_monitoring", null) ?? RemoteMonitoring.Default(); }
+        catch (JsonException) { return RemoteMonitoring.Default(); }
+    }
+
     void LoadSettings()
     {
+        loadingSettings = true;
         ThemeBox.ItemsSource = ThemeManager.Themes;
         ThemeBox.SelectedItem = ThemeManager.Normalize(db.Setting("theme", "Automático"));
-        ConcurrencyBox.ItemsSource = new[] { 1, 2, 3 };
-        ConcurrencyBox.SelectedItem = Math.Clamp(db.Setting("concurrency", 1), 1, 3);
-        ChunkBox.ItemsSource = new[] { 1, 4, 8, 16, 32, 64 };
-        ChunkBox.SelectedItem = db.Setting("chunk_mib", 8);
+        try { StartWindowsBox.IsChecked = Startup.IsEnabled(); }
+        catch (Exception exc) when (exc is System.Security.SecurityException or UnauthorizedAccessException or IOException) { StartWindowsBox.IsChecked = false; }
+        ConcurrencyBox.Text = Math.Clamp(db.Setting("concurrency", 1), 1, 3).ToString();
+        ChunkBox.ItemsSource = new[] { "1", "4", "8", "16", "32", "64" };
+        ChunkBox.SelectedItem = db.Setting("chunk_mib", 8).ToString();
         RetriesBox.Text = db.Setting("retries", 10).ToString();
+        CompressLimitBox.Text = Number(db.Setting("compress_upload_limit", 1.0)) + " MB/s";
+        AdvancedBox.IsChecked = db.Setting("advanced_pipeline", false);
         FullScopeBox.IsChecked = db.Setting("full_scope", true);
-        var config = notifier.Config();
-        WhatsAppEnabled.IsChecked = config.Enabled;
-        recipients.Clear();
-        recipients.AddRange(notifier.Recipients());
-        ShowPhones();
+        var remote = Remote();
+        RemoteEnabledBox.IsChecked = remote.Enabled;
+        RemoteIdBox.Text = remote.ComputerId;
+        RemoteNameBox.Text = remote.ComputerName;
+        RemoteIntervalBox.Text = remote.UpdateIntervalSeconds.ToString();
+        RemoteCredentialsBox.Text = remote.FirebaseCredentials;
+        UpdateStatus.Text = $"Versão {Version}";
+        WhatsAppEnabled.IsChecked = notifier.Config().Enabled;
+        phones.Clear();
+        foreach (var (phone, key) in notifier.Recipients()) phones.Add(new PhoneRow(phone, key));
+        loadingSettings = false;
     }
 
     void Theme_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (ThemeBox.SelectedItem is string theme && IsLoaded)
-        {
-            db.SaveSetting("theme", theme);
-            ThemeManager.Apply(theme);
-        }
+        // Como na versão Python: trocar o tema salva as configurações.
+        if (!loadingSettings && IsLoaded) SaveSettings();
     }
 
-    void SaveSettings_Click(object sender, RoutedEventArgs e)
+    void SaveSettings_Click(object sender, RoutedEventArgs e) => SaveSettings();
+
+    static bool ParseNumber(string text, out double value) =>
+        double.TryParse(text.Replace("MB/s", "", StringComparison.OrdinalIgnoreCase).Trim().Replace(',', '.'),
+                        NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+
+    void SaveSettings()
     {
-        if (!int.TryParse(RetriesBox.Text, out var retries) || retries is < 0 or > 50)
+        if (!int.TryParse(ConcurrencyBox.Text.Trim(), out var concurrency) || concurrency is < 1 or > 3)
+        {
+            Notice("Uploads simultâneos: use um número de 1 a 3.");
+            return;
+        }
+        if (!int.TryParse(RetriesBox.Text.Trim(), out var retries) || retries is < 0 or > 50)
         {
             Notice("Tentativas por falha: use um número de 0 a 50.");
             return;
         }
-        db.SaveSetting("concurrency", (int)(ConcurrencyBox.SelectedItem ?? 1));
-        db.SaveSetting("chunk_mib", (int)(ChunkBox.SelectedItem ?? 8));
+        if (!ParseNumber(CompressLimitBox.Text, out var limit) || limit is < 0.1 or > 1000)
+        {
+            Notice("Upload durante a compactação: use um valor de 0,1 a 1000 MB/s.");
+            return;
+        }
+        if (!int.TryParse(RemoteIntervalBox.Text.Trim(), out var interval) || interval is < 1 or > 3600)
+        {
+            Notice("Intervalo: use um número de 1 a 3600 segundos.");
+            return;
+        }
+        var remoteId = RemoteIdBox.Text.Trim();
+        if (RemoteEnabledBox.IsChecked == true && (!Regex.IsMatch(remoteId, "^[A-Za-z0-9_-]{1,128}$")
+                || RemoteNameBox.Text.Trim() == "" || RemoteCredentialsBox.Text.Trim() == ""))
+        {
+            Notice("Preencha ID (letras, números, _ ou -), nome e credencial Firebase.");
+            return;
+        }
+        db.SaveSetting("remote_monitoring", new RemoteMonitoring(RemoteEnabledBox.IsChecked == true, remoteId,
+            RemoteNameBox.Text.Trim(), interval, RemoteCredentialsBox.Text.Trim()));
+        var startup = StartWindowsBox.IsChecked == true;
+        try
+        {
+            if (startup != Startup.IsEnabled()) Startup.SetEnabled(startup);
+            db.SaveSetting("start_with_windows", startup);
+        }
+        catch (Exception exc) when (exc is System.Security.SecurityException or UnauthorizedAccessException or IOException)
+        {
+            Notice("O Windows bloqueou a inicialização automática.");
+            StartWindowsBox.IsChecked = !startup;
+            return;
+        }
+        var theme = ThemeBox.SelectedItem as string ?? "Automático";
+        db.SaveSetting("theme", theme);
+        db.SaveSetting("concurrency", concurrency);
+        db.SaveSetting("chunk_mib", int.Parse(ChunkBox.SelectedItem as string ?? "8"));
         db.SaveSetting("retries", retries);
         db.SaveSetting("full_scope", FullScopeBox.IsChecked == true);
-        ShowStatus("Configurações salvas.", 5000);
+        db.SaveSetting("compress_upload_limit", Math.Round(limit, 1));
+        db.SaveSetting("advanced_pipeline", AdvancedBox.IsChecked == true);
+        CompressLimitBox.Text = Number(Math.Round(limit, 1)) + " MB/s";
+        ThemeManager.Apply(theme);
+        foreach (var plot in plots.Values) plot.InvalidateVisual();
+        ShowStatus("Configurações salvas.", 6000);
     }
 
-    void ShowPhones()
+    void SelectFirebase_Click(object sender, RoutedEventArgs e)
     {
-        phones.Clear();
-        foreach (var (phone, _) in recipients) phones.Add(phone);
+        var dialog = new OpenFileDialog { Title = "Credencial de serviço Firebase", Filter = "JSON (*.json)|*.json" };
+        if (dialog.ShowDialog(this) == true) RemoteCredentialsBox.Text = dialog.FileName;
     }
 
-    void AddPhone_Click(object sender, RoutedEventArgs e)
+    // O monitoramento pelo celular (Firebase) chega numa próxima etapa da versão C#.
+    void PairMobile_Click(object sender, RoutedEventArgs e) =>
+        Notice(Remote().Enabled ? "Conectar celular ainda não está disponível na versão C#. Use a versão Python por enquanto." : "Ative e salve o Firebase antes.");
+
+    void MobileReaders_Click(object sender, RoutedEventArgs e) => PairMobile_Click(sender, e);
+
+    void CheckUpdate_Click(object sender, RoutedEventArgs e) =>
+        UpdateStatus.Text = $"Versão {Version}\nA atualização automática da versão C# ainda não está disponível.";
+
+    // ---- WhatsApp
+
+    bool AddPhone()
     {
         var phone = WhatsApp.Normalize(PhoneBox.Text);
         var key = ApiKeyBox.Text.Trim();
         if (phone.Length < 10 || key == "")
         {
-            Notice("Informe o número com DDI e DDD e a apikey recebida do CallMeBot.");
-            return;
+            Notice("Informe o número com DDI e DDD (ex.: 5511999998888) e a apikey.");
+            return false;
         }
-        recipients.RemoveAll(r => r.Phone == phone);
-        recipients.Add((phone, key));
+        foreach (var old in phones.Where(p => p.Phone == phone).ToList()) phones.Remove(old);
+        phones.Add(new PhoneRow(phone, key));
         PhoneBox.Clear();
         ApiKeyBox.Clear();
-        ShowPhones();
+        ShowStatus("Número adicionado. Clique em Salvar notificações.", 6000);
+        return true;
+    }
+
+    void AddPhone_Click(object sender, RoutedEventArgs e) => AddPhone();
+
+    void ApiKey_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) AddPhone();
     }
 
     void RemovePhone_Click(object sender, RoutedEventArgs e)
     {
-        if (PhoneList.SelectedItem is string phone)
-        {
-            recipients.RemoveAll(r => r.Phone == phone);
-            ShowPhones();
-        }
+        if (PhoneList.SelectedItem is PhoneRow row) phones.Remove(row);
     }
+
+    /// <summary>Número digitado e ainda não adicionado também conta, para nada se perder.</summary>
+    bool TypedPhoneAdded() => (PhoneBox.Text.Trim() == "" && ApiKeyBox.Text.Trim() == "") || AddPhone();
 
     void SaveWhatsApp_Click(object sender, RoutedEventArgs e)
     {
-        notifier.Save(WhatsAppEnabled.IsChecked == true, recipients);
-        ShowStatus("Notificações salvas.", 5000);
+        if (!TypedPhoneAdded()) return;
+        if (WhatsAppEnabled.IsChecked == true && phones.Count == 0)
+        {
+            Notice("Adicione ao menos um número para ativar as notificações.");
+            return;
+        }
+        try
+        {
+            notifier.Save(WhatsAppEnabled.IsChecked == true, phones.Select(p => (p.Phone, p.ApiKey)));
+        }
+        catch (Exception exc) when (exc is System.Security.Cryptography.CryptographicException or PlatformNotSupportedException)
+        {
+            Notice("Não foi possível proteger a apikey neste computador.");
+            return;
+        }
+        ShowStatus("Notificações salvas.", 6000);
     }
 
     async void TestWhatsApp_Click(object sender, RoutedEventArgs e)
     {
-        if (recipients.Count == 0)
+        if (!TypedPhoneAdded()) return;
+        if (phones.Count == 0)
         {
-            Notice("Adicione ao menos um número.");
+            Notice("Informe o número e a apikey.");
             return;
         }
         ShowStatus("Enviando teste…");
-        var errors = await notifier.Notify(WhatsApp.Message("DriveFlow TESTE"), recipients.ToList());
+        var errors = await notifier.Notify(WhatsApp.Message("DriveFlow TESTE"), phones.Select(p => (p.Phone, p.ApiKey)).ToList());
         ShowStatus(DefaultStatus);
         Notice(errors.Count == 0 ? "Teste enviado. Confira o WhatsApp." : string.Join("\n", errors));
     }
@@ -694,7 +1204,7 @@ public partial class MainWindow : Window
 
     void ExportEvents_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new SaveFileDialog { FileName = "driveflow-eventos.log", Filter = "Log (*.log)|*.log" };
+        var dialog = new SaveFileDialog { Title = "Exportar eventos", FileName = "driveflow-eventos.log", Filter = "Log (*.log)|*.log" };
         if (dialog.ShowDialog(this) != true) return;
         try { File.WriteAllText(dialog.FileName, ActivityText.Text); }
         catch (IOException) { Notice("Não foi possível salvar o arquivo."); }

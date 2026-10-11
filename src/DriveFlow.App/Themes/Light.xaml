@@ -1,34 +1,64 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Identidade Nexotool, tema claro. Os nomes batem com theme.py. -->
+    <!-- Paleta do tema claro; mesmos valores do theme.py da versão Python. -->
+    <Color x:Key="BgColor">#F4F6FA</Color>
     <SolidColorBrush x:Key="Bg" Color="#F4F6FA" />
+    <Color x:Key="SurfaceColor">#FFFFFF</Color>
     <SolidColorBrush x:Key="Surface" Color="#FFFFFF" />
+    <Color x:Key="AltColor">#F8FAFC</Color>
     <SolidColorBrush x:Key="Alt" Color="#F8FAFC" />
+    <Color x:Key="BorderColor">#E2E8F0</Color>
     <SolidColorBrush x:Key="Border" Color="#E2E8F0" />
+    <Color x:Key="StrongColor">#CBD5E1</Color>
     <SolidColorBrush x:Key="Strong" Color="#CBD5E1" />
+    <Color x:Key="HoverBorderColor">#94A3B8</Color>
     <SolidColorBrush x:Key="HoverBorder" Color="#94A3B8" />
+    <Color x:Key="TextColor">#0F172A</Color>
     <SolidColorBrush x:Key="Text" Color="#0F172A" />
+    <Color x:Key="MutedColor">#475569</Color>
     <SolidColorBrush x:Key="Muted" Color="#475569" />
+    <Color x:Key="SubtleColor">#64748B</Color>
     <SolidColorBrush x:Key="Subtle" Color="#64748B" />
+    <Color x:Key="DisabledColor">#94A3B8</Color>
     <SolidColorBrush x:Key="Disabled" Color="#94A3B8" />
+    <Color x:Key="DisabledFillColor">#E2E8F0</Color>
+    <SolidColorBrush x:Key="DisabledFill" Color="#E2E8F0" />
+    <Color x:Key="AccentColor">#2563EB</Color>
     <SolidColorBrush x:Key="Accent" Color="#2563EB" />
+    <Color x:Key="AccentHoverColor">#1D4ED8</Color>
     <SolidColorBrush x:Key="AccentHover" Color="#1D4ED8" />
+    <Color x:Key="AccentPressedColor">#1E40AF</Color>
     <SolidColorBrush x:Key="AccentPressed" Color="#1E40AF" />
+    <Color x:Key="SoftColor">#EFF6FF</Color>
     <SolidColorBrush x:Key="Soft" Color="#EFF6FF" />
+    <Color x:Key="SelectionColor">#DBEAFE</Color>
     <SolidColorBrush x:Key="Selection" Color="#DBEAFE" />
+    <Color x:Key="SuccessColor">#16A34A</Color>
     <SolidColorBrush x:Key="Success" Color="#16A34A" />
+    <Color x:Key="DangerColor">#DC2626</Color>
     <SolidColorBrush x:Key="Danger" Color="#DC2626" />
+    <Color x:Key="WarningColor">#D97706</Color>
+    <SolidColorBrush x:Key="Warning" Color="#D97706" />
+    <Color x:Key="ScrollColor">#94A3B8</Color>
+    <SolidColorBrush x:Key="Scroll" Color="#94A3B8" />
+    <Color x:Key="NavyColor">#0B1733</Color>
     <SolidColorBrush x:Key="Navy" Color="#0B1733" />
+    <Color x:Key="Navy2Color">#132447</Color>
     <SolidColorBrush x:Key="Navy2" Color="#132447" />
+    <Color x:Key="Navy3Color">#1E3260</Color>
     <SolidColorBrush x:Key="Navy3" Color="#1E3260" />
+    <Color x:Key="OnNavyColor">#F8FAFC</Color>
     <SolidColorBrush x:Key="OnNavy" Color="#F8FAFC" />
+    <Color x:Key="OnNavyMutedColor">#94A3B8</Color>
     <SolidColorBrush x:Key="OnNavyMuted" Color="#94A3B8" />
+    <Color x:Key="CyanColor">#22D3EE</Color>
+    <SolidColorBrush x:Key="Cyan" Color="#22D3EE" />
+    <Color x:Key="DoneStartColor">#0D9488</Color>
+    <SolidColorBrush x:Key="DoneStart" Color="#0D9488" />
+    <Color x:Key="DoneEndColor">#2DD4BF</Color>
+    <SolidColorBrush x:Key="DoneEnd" Color="#2DD4BF" />
     <LinearGradientBrush x:Key="AccentGradient" StartPoint="0,0" EndPoint="1,0">
         <GradientStop Color="#2563EB" Offset="0" />
         <GradientStop Color="#22D3EE" Offset="1" />
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="DoneGradient" StartPoint="0,0" EndPoint="1,0">
-        <GradientStop Color="#0D9488" Offset="0" />
-        <GradientStop Color="#2DD4BF" Offset="1" />
     </LinearGradientBrush>
 </ResourceDictionary>

@@ -17,7 +17,13 @@
     <PublishReadyToRun>true</PublishReadyToRun>
     <TieredPGO>true</TieredPGO>
     <InvariantGlobalization>false</InvariantGlobalization>
+    <ApplicationIcon>Assets\upload.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Ícones da versão Python. -->
+    <Resource Include="Assets\**\*.png;Assets\**\*.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DriveFlow.Core\DriveFlow.Core.csproj" />

@@ -61,6 +61,8 @@ public partial class App : Application
     {
         var vault = new DpapiVault();
         var db = new Database(vault);
+        // No teste rápido, uma linha na fila monta também a barra e os botões de cada upload.
+        if (smokeOutput is not null && Environment.ProcessPath is { } exe) db.Add(exe, "root", "Meu Drive", "smoke");
         ThemeManager.Apply(db.Setting("theme", "Automático"));
         var auth = new GoogleAuth(vault);
         var window = new MainWindow(db, auth, new UploadManager(db, auth));
@@ -73,6 +75,7 @@ public partial class App : Application
             timer.Tick += (_, _) =>
             {
                 timer.Stop();
+                window.SmokeTour();
                 File.WriteAllText(smokeOutput, JsonSerializer.Serialize(new
                 {
                     ok = true, version = global::DriveFlow.App.MainWindow.Version, title = window.Title, rows = db.All().Count,

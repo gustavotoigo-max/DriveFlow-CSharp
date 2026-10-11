@@ -5,11 +5,13 @@ namespace DriveFlow.App;
 
 public static class ThemeManager
 {
-    public static readonly string[] Themes = ["Automático", "Claro", "Escuro"];
-    // Temas escuros das versões anteriores continuam escuros.
-    static readonly HashSet<string> LegacyDark = ["Azul profundo", "Cinza grafite", "Verde escuro", "Spotify", "Grafite e verde"];
+    public const string Green = "Grafite e verde";
+    public static readonly string[] Themes = ["Automático", "Claro", "Escuro", Green];
+    // Temas das versões anteriores: os verdes viram Grafite e verde; o azul profundo, Escuro.
+    static readonly HashSet<string> LegacyGreen = ["Cinza grafite", "Verde escuro", "Spotify"];
 
-    public static string Normalize(string saved) => LegacyDark.Contains(saved) ? "Escuro" : Themes.Contains(saved) ? saved : "Automático";
+    public static string Normalize(string saved) =>
+        LegacyGreen.Contains(saved) ? Green : saved == "Azul profundo" ? "Escuro" : Themes.Contains(saved) ? saved : "Automático";
 
     /// <summary>Modo escuro dos aplicativos em Configurações > Personalização > Cores.</summary>
     public static bool WindowsPrefersDark()
@@ -27,7 +29,7 @@ public static class ThemeManager
 
     public static bool IsDark(string theme) => Normalize(theme) switch
     {
-        "Escuro" => true,
+        "Escuro" or Green => true,
         "Claro" => false,
         _ => WindowsPrefersDark(),
     };
@@ -35,7 +37,8 @@ public static class ThemeManager
     public static void Apply(string theme)
     {
         var dictionaries = Application.Current.Resources.MergedDictionaries;
-        var palette = new ResourceDictionary { Source = new Uri($"pack://application:,,,/DriveFlow;component/Themes/{(IsDark(theme) ? "Dark" : "Light")}.xaml") };
+        var file = Normalize(theme) == Green ? "Green" : IsDark(theme) ? "Dark" : "Light";
+        var palette = new ResourceDictionary { Source = new Uri($"pack://application:,,,/DriveFlow;component/Themes/{file}.xaml") };
         dictionaries[0] = palette;
     }
 }
