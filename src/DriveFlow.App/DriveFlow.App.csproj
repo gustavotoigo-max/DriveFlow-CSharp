@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>DriveFlow</AssemblyName>
+    <RootNamespace>DriveFlow.App</RootNamespace>
+    <Version>2.0.0</Version>
+    <!-- Permite compilar (não rodar) fora do Windows, como no CI. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- Abertura rápida: código pré-compilado e sem extração para a pasta temporária. -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <TieredPGO>true</TieredPGO>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <ApplicationIcon>Assets\upload.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Ícones da versão Python. -->
+    <Resource Include="Assets\**\*.png;Assets\**\*.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DriveFlow.Core\DriveFlow.Core.csproj" />
+  </ItemGroup>
+
+</Project>

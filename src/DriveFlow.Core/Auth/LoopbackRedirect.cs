@@ -18,7 +18,7 @@ public static class LoopbackRedirect
         {
             using var client = await listener.AcceptTcpClientAsync(ct).ConfigureAwait(false);
             using var stream = client.GetStream();
-            var line = await ReadRequestLine(stream, ct).ConfigureAwait(false);
+            var line = await ReadRequest(stream, ct).ConfigureAwait(false);
             // "GET /?code=...&state=... HTTP/1.1"
             var parts = line.Split(' ');
             var target = parts.Length >= 2 && parts[0] == "GET" ? parts[1] : "";
@@ -27,22 +27,35 @@ public static class LoopbackRedirect
             var head = Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n");
             await stream.WriteAsync(head, ct).ConfigureAwait(false);
             await stream.WriteAsync(body, ct).ConfigureAwait(false);
+            // Fecha a escrita com calma: fechar com dados do pedido ainda não lidos faz o
+            // Windows mandar RST, e o navegador mostra erro de conexão em vez da página.
+            client.Client.Shutdown(SocketShutdown.Send);
             // Ignora pedidos do navegador que não são o retorno deste login (ex.: favicon).
             if (query.ContainsKey("state") && query["state"] == state) return query;
             if (query.ContainsKey("error")) return query;
         }
     }
 
-    static async Task<string> ReadRequestLine(NetworkStream stream, CancellationToken ct)
+    /// <summary>Lê o pedido inteiro (até a linha em branco) e devolve a primeira linha.</summary>
+    static async Task<string> ReadRequest(NetworkStream stream, CancellationToken ct)
     {
-        var buffer = new List<byte>();
+        var lines = new List<string>();
+        var current = new List<byte>();
         var one = new byte[1];
-        while (buffer.Count < 8192 && await stream.ReadAsync(one, ct).ConfigureAwait(false) == 1)
+        var total = 0;
+        while (total++ < 65536 && await stream.ReadAsync(one, ct).ConfigureAwait(false) == 1)
         {
-            if (one[0] == '\n') break;
-            if (one[0] != '\r') buffer.Add(one[0]);
+            if (one[0] == '\r') continue;
+            if (one[0] != '\n')
+            {
+                current.Add(one[0]);
+                continue;
+            }
+            if (current.Count == 0) break;
+            lines.Add(Encoding.ASCII.GetString(current.ToArray()));
+            current.Clear();
         }
-        return Encoding.ASCII.GetString(buffer.ToArray());
+        return lines.Count > 0 ? lines[0] : Encoding.ASCII.GetString(current.ToArray());
     }
 
     public static Dictionary<string, string> Parse(string query)

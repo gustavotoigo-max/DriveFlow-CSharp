@@ -1,0 +1,64 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Paleta do tema escuro; mesmos valores do theme.py da versão Python. -->
+    <Color x:Key="BgColor">#0A1222</Color>
+    <SolidColorBrush x:Key="Bg" Color="#0A1222" />
+    <Color x:Key="SurfaceColor">#111B2E</Color>
+    <SolidColorBrush x:Key="Surface" Color="#111B2E" />
+    <Color x:Key="AltColor">#16223A</Color>
+    <SolidColorBrush x:Key="Alt" Color="#16223A" />
+    <Color x:Key="BorderColor">#24324E</Color>
+    <SolidColorBrush x:Key="Border" Color="#24324E" />
+    <Color x:Key="StrongColor">#33456A</Color>
+    <SolidColorBrush x:Key="Strong" Color="#33456A" />
+    <Color x:Key="HoverBorderColor">#4E6390</Color>
+    <SolidColorBrush x:Key="HoverBorder" Color="#4E6390" />
+    <Color x:Key="TextColor">#E6ECF5</Color>
+    <SolidColorBrush x:Key="Text" Color="#E6ECF5" />
+    <Color x:Key="MutedColor">#A9B5C9</Color>
+    <SolidColorBrush x:Key="Muted" Color="#A9B5C9" />
+    <Color x:Key="SubtleColor">#8090A8</Color>
+    <SolidColorBrush x:Key="Subtle" Color="#8090A8" />
+    <Color x:Key="DisabledColor">#5D6B84</Color>
+    <SolidColorBrush x:Key="Disabled" Color="#5D6B84" />
+    <Color x:Key="DisabledFillColor">#1C2840</Color>
+    <SolidColorBrush x:Key="DisabledFill" Color="#1C2840" />
+    <Color x:Key="AccentColor">#3B82F6</Color>
+    <SolidColorBrush x:Key="Accent" Color="#3B82F6" />
+    <Color x:Key="AccentHoverColor">#1D4ED8</Color>
+    <SolidColorBrush x:Key="AccentHover" Color="#1D4ED8" />
+    <Color x:Key="AccentPressedColor">#1E40AF</Color>
+    <SolidColorBrush x:Key="AccentPressed" Color="#1E40AF" />
+    <Color x:Key="SoftColor">#14294F</Color>
+    <SolidColorBrush x:Key="Soft" Color="#14294F" />
+    <Color x:Key="SelectionColor">#1D3B72</Color>
+    <SolidColorBrush x:Key="Selection" Color="#1D3B72" />
+    <Color x:Key="SuccessColor">#22C55E</Color>
+    <SolidColorBrush x:Key="Success" Color="#22C55E" />
+    <Color x:Key="DangerColor">#F87171</Color>
+    <SolidColorBrush x:Key="Danger" Color="#F87171" />
+    <Color x:Key="WarningColor">#FBBF24</Color>
+    <SolidColorBrush x:Key="Warning" Color="#FBBF24" />
+    <Color x:Key="ScrollColor">#4E6390</Color>
+    <SolidColorBrush x:Key="Scroll" Color="#4E6390" />
+    <Color x:Key="NavyColor">#0B1733</Color>
+    <SolidColorBrush x:Key="Navy" Color="#0B1733" />
+    <Color x:Key="Navy2Color">#132447</Color>
+    <SolidColorBrush x:Key="Navy2" Color="#132447" />
+    <Color x:Key="Navy3Color">#1E3260</Color>
+    <SolidColorBrush x:Key="Navy3" Color="#1E3260" />
+    <Color x:Key="OnNavyColor">#F8FAFC</Color>
+    <SolidColorBrush x:Key="OnNavy" Color="#F8FAFC" />
+    <Color x:Key="OnNavyMutedColor">#94A3B8</Color>
+    <SolidColorBrush x:Key="OnNavyMuted" Color="#94A3B8" />
+    <Color x:Key="CyanColor">#22D3EE</Color>
+    <SolidColorBrush x:Key="Cyan" Color="#22D3EE" />
+    <Color x:Key="DoneStartColor">#0D9488</Color>
+    <SolidColorBrush x:Key="DoneStart" Color="#0D9488" />
+    <Color x:Key="DoneEndColor">#2DD4BF</Color>
+    <SolidColorBrush x:Key="DoneEnd" Color="#2DD4BF" />
+    <LinearGradientBrush x:Key="AccentGradient" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#3B82F6" Offset="0" />
+        <GradientStop Color="#22D3EE" Offset="1" />
+    </LinearGradientBrush>
+</ResourceDictionary>

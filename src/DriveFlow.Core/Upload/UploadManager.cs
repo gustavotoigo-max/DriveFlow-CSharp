@@ -36,6 +36,12 @@ public sealed class UploadManager(Database db, IAccount auth)
         lock (gate) return running.ContainsKey(id);
     }
 
+    /// <summary>Removido durante o envio: some da lista quando o envio parar.</summary>
+    public bool IsRemoving(string id)
+    {
+        lock (gate) return pendingRemovals.Contains(id);
+    }
+
     public int RunningCount
     {
         get { lock (gate) return running.Count; }

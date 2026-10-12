@@ -225,6 +225,11 @@ public sealed class Database : IDisposable
         lock (gate) Exec("INSERT INTO events VALUES ($t,$u,$e)", null, ("$t", Now()), ("$u", uploadId), ("$e", text));
     }
 
+    public void SaveAccount(string id, string email)
+    {
+        lock (gate) Exec("INSERT OR REPLACE INTO accounts VALUES ($i,$e)", null, ("$i", id), ("$e", email));
+    }
+
     public IReadOnlyList<EventRow> Events()
     {
         lock (gate)
