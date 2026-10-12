@@ -232,9 +232,10 @@ public partial class MainWindow : Window
         // Linha do WinRAR com um processo falso, para desenhar as duas barras em todos os temas.
         var folder = Directory.CreateTempSubdirectory("driveflow-smoke-rar-").FullName;
         var output = Directory.CreateDirectory(Path.Combine(folder, "volumes")).FullName;
-        File.WriteAllText(Path.Combine(output, "Obra.z01"), "x");
         var job = new Compression("WinRAR.exe", Directory.CreateDirectory(Path.Combine(folder, "Obra")).FullName, output, "Obra", "ZIP", "Normal",
                                   1 << 20, "", (_, _) => new SmokeArchiver()) { Destination = ("root", "Meu Drive"), Account = "smoke" };
+        // Volume sendo gravado depois de o WinRAR começar.
+        File.WriteAllText(Path.Combine(output, "Obra.z01"), "x");
         Sync(db.All().Where(x => x.Status != Status.Done).ToList(), job);
         if (queue.Count(r => r.IsVirtual) != 1) throw new InvalidOperationException("Linha da compactação não apareceu.");
         foreach (var theme in ThemeManager.Themes.Reverse())
