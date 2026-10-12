@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
 using DriveFlow.Core;
+using DriveFlow.Core.Compress;
 using DriveFlow.Core.Drive;
 using DriveFlow.Core.Storage;
 
@@ -22,6 +23,8 @@ public abstract class Observable : INotifyPropertyChanged
         field = value;
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
+
+    protected void Changed(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
 /// <summary>Uma linha da fila na tela, atualizada no lugar a cada meio segundo.</summary>
@@ -29,8 +32,9 @@ public sealed class QueueRow(string id, Action<QueueRow, bool> enabledChanged) :
 {
     public string Id { get; } = id;
     string name = "", destination = "", bytesText = "", statusText = "", timeText = "", tip = "";
-    double progress;
-    bool enabled, isActive, canAct = true;
+    string uploadCaption = "", packingIdentity = "";
+    double progress, packingProgress = 1;
+    bool enabled, isActive, canAct = true, isCompressed, isVirtual;
 
     public string Name { get => name; private set => Set(ref name, value); }
     public string Destination { get => destination; private set => Set(ref destination, value); }
@@ -41,7 +45,32 @@ public sealed class QueueRow(string id, Action<QueueRow, bool> enabledChanged) :
     public double Progress { get => progress; private set => Set(ref progress, value); }
     /// <summary>Enviando ou retomando: status em destaque e barra animada.</summary>
     public bool IsActive { get => isActive; private set => Set(ref isActive, value); }
-    public bool CanAct { get => canAct; private set => Set(ref canAct, value); }
+    public bool CanAct
+    {
+        get => canAct;
+        private set
+        {
+            Set(ref canAct, value);
+            Changed(nameof(CanPlay));
+        }
+    }
+    /// <summary>Volume do Compactar: mostra a barra "Compactação" acima da de upload.</summary>
+    public bool IsCompressed { get => isCompressed; private set => Set(ref isCompressed, value); }
+    public double PackingProgress { get => packingProgress; private set => Set(ref packingProgress, value); }
+    /// <summary>Muda a cada volume, para a barra recomeçar do zero sem animar para trás.</summary>
+    public string PackingIdentity { get => packingIdentity; private set => Set(ref packingIdentity, value); }
+    public string UploadCaption { get => uploadCaption; private set => Set(ref uploadCaption, value); }
+    /// <summary>A linha do WinRAR em andamento: não tem envio próprio.</summary>
+    public bool IsVirtual
+    {
+        get => isVirtual;
+        private set
+        {
+            Set(ref isVirtual, value);
+            Changed(nameof(CanPlay));
+        }
+    }
+    public bool CanPlay => CanAct && !IsVirtual;
 
     /// <summary>Marcado = entra no Iniciar. Desmarcar pausa o envio.</summary>
     public bool Enabled
@@ -70,7 +99,34 @@ public sealed class QueueRow(string id, Action<QueueRow, bool> enabledChanged) :
         TimeText = $"{Format.Size(item.Speed)}/s\nDecorrido {Format.Duration(item.Elapsed)}\nRestante {remaining}";
         Tip = item.Error != "" ? item.Error : item.Path;
         CanAct = !removing;
+        IsCompressed = item.Compressed;
+        PackingProgress = 1;
+        PackingIdentity = Id;
+        UploadCaption = item.Compressed ? "Upload" : "";
         Enabled = item.Enabled;
+        loading = false;
+    }
+
+    /// <summary>Linha do volume que o WinRAR está gravando agora.</summary>
+    public void LoadCompression(Compression job)
+    {
+        loading = true;
+        var (path, fraction) = job.Current();
+        Name = path is null ? System.IO.Path.GetFileName(job.Archive) : System.IO.Path.GetFileName(path);
+        Destination = job.Destination.Name.Replace(" / ", "/");
+        IsActive = !job.Suspended;
+        IsVirtual = true;
+        IsCompressed = true;
+        Progress = 0;
+        PackingProgress = fraction;
+        PackingIdentity = Id + "|" + Name;
+        UploadCaption = "Upload";
+        BytesText = $"{Format.Size(Compression.Size(path))} gravados";
+        StatusText = job.Suspended ? "Aguardando upload" : "Compactando";
+        TimeText = $"{(job.Suspended ? "Em pausa" : "Compactando")}\nDecorrido {Format.Duration(job.Elapsed)}";
+        Tip = job.Source;
+        CanAct = true;
+        Enabled = true;
         loading = false;
     }
 }

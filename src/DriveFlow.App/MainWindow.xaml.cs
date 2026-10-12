@@ -15,6 +15,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using DriveFlow.Core;
 using DriveFlow.Core.Auth;
+using DriveFlow.Core.Compress;
 using DriveFlow.Core.Drive;
 using DriveFlow.Core.Notify;
 using DriveFlow.Core.Storage;
@@ -217,8 +218,25 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Teste rápido do pacote: abre cada página em cada tema para os modelos de tela serem montados.</summary>
+    sealed class SmokeArchiver : IArchiverProcess
+    {
+        public int? ExitCode { get; private set; }
+        public long? BytesRead => null;
+        public void Kill() => ExitCode = 255;
+        public void Suspend() { }
+        public void Resume() { }
+    }
+
     public void SmokeTour()
     {
+        // Linha do WinRAR com um processo falso, para desenhar as duas barras em todos os temas.
+        var folder = Directory.CreateTempSubdirectory("driveflow-smoke-rar-").FullName;
+        var output = Directory.CreateDirectory(Path.Combine(folder, "volumes")).FullName;
+        File.WriteAllText(Path.Combine(output, "Obra.z01"), "x");
+        var job = new Compression("WinRAR.exe", Directory.CreateDirectory(Path.Combine(folder, "Obra")).FullName, output, "Obra", "ZIP", "Normal",
+                                  1 << 20, "", (_, _) => new SmokeArchiver()) { Destination = ("root", "Meu Drive"), Account = "smoke" };
+        Sync(db.All().Where(x => x.Status != Status.Done).ToList(), job);
+        if (queue.Count(r => r.IsVirtual) != 1) throw new InvalidOperationException("Linha da compactação não apareceu.");
         foreach (var theme in ThemeManager.Themes.Reverse())
         {
             ThemeManager.Apply(theme);
@@ -229,6 +247,10 @@ public partial class MainWindow : Window
             }
         }
         ThemeManager.Apply(db.Setting("theme", "Automático"));
+        job.Cancel();
+        Sync(db.All().Where(x => x.Status != Status.Done).ToList());
+        try { Directory.Delete(folder, true); }
+        catch (Exception exc) when (exc is IOException or UnauthorizedAccessException) { }
     }
 
     public void ForceClose()
@@ -242,11 +264,22 @@ public partial class MainWindow : Window
         base.OnClosing(e);
         if (forceClose)
         {
+            compression?.Cancel();
             manager.Closed = true;
             manager.PauseAll();
             timer.Stop();
             folderTimer.Stop();
             return;
+        }
+        if (compression is { } job)
+        {
+            if (!Dialogs.Ask(this, "Fechar DriveFlow", "O WinRAR ainda está compactando. Parar e fechar?"))
+            {
+                e.Cancel = true;
+                return;
+            }
+            job.Cancel();
+            compression = null;
         }
         if (manager.RunningCount > 0)
         {
@@ -671,17 +704,20 @@ public partial class MainWindow : Window
         if (await Try(() => client.CreateFolder(parent, name)) is not null) RefreshFolder(parent);
     }
 
-    // ---- Compactar (WinRAR): a compactação chega na próxima etapa da versão C#.
+    // ---- Compactar (WinRAR): os volumes entram na fila conforme ficam prontos.
+
+    Compression? compression;
+    string? winrar;
 
     static string? FindWinRar()
     {
-        var candidates = new List<string>();
+        var values = new List<string?>();
         void Read(RegistryKey hive, string key, string value)
         {
             try
             {
                 using var handle = hive.OpenSubKey(key);
-                if (handle?.GetValue(value) is string path) candidates.Add(path);
+                values.Add(handle?.GetValue(value) as string);
             }
             catch (Exception exc) when (exc is System.Security.SecurityException or UnauthorizedAccessException or IOException)
             {
@@ -692,24 +728,150 @@ public partial class MainWindow : Window
         Read(Registry.LocalMachine, @"SOFTWARE\WOW6432Node\WinRAR", "exe32");
         Read(Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\WinRAR.exe", "");
         Read(Registry.CurrentUser, @"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\WinRAR.exe", "");
-        foreach (var variable in new[] { "ProgramW6432", "ProgramFiles", "ProgramFiles(x86)" })
-            if (Environment.GetEnvironmentVariable(variable) is { Length: > 0 } folder)
-                candidates.Add(Path.Combine(folder, "WinRAR", "WinRAR.exe"));
-        return candidates.Select(c => c.Trim('"'))
-            .FirstOrDefault(c => Path.GetFileName(c).Equals("WinRAR.exe", StringComparison.OrdinalIgnoreCase) && File.Exists(c));
+        return WinRar.Find(values);
     }
 
     void UpdateCompressButton()
     {
-        var winrar = FindWinRar();
+        winrar = FindWinRar();
         CompressIcon.Source = winrar is null ? null : ShellIcons.ForPath(winrar);
         CompressIcon.Visibility = CompressIcon.Source is null ? Visibility.Collapsed : Visibility.Visible;
-        CompressButton.IsEnabled = false;
-        CompressButton.ToolTip = winrar is null ? "WinRAR não encontrado neste computador" : "Compactar com o WinRAR: em breve na versão C#";
-        ToolTipService.SetShowOnDisabled(CompressButton, true);
+        CompressButton.IsEnabled = winrar is not null && compression is null;
+        CompressButton.ToolTip = winrar is null ? "WinRAR não encontrado neste computador" : "Compactar uma pasta com o WinRAR e enviar os volumes";
     }
 
-    void Compress_Click(object sender, RoutedEventArgs e) { }
+    /// <summary>Pasta sugerida: a marcada, senão a selecionada na árvore, senão a pasta comum dos arquivos marcados.</summary>
+    string SelectedFolder()
+    {
+        if (CheckedFolders() is [var only]) return only;
+        if (LocalTree.SelectedItem is LocalNode { IsPlaceholder: false } node)
+            return node.IsDir ? node.Path : Path.GetDirectoryName(node.Path) ?? "";
+        var parents = checkedPaths.Where(File.Exists).Select(Path.GetDirectoryName).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (parents.Count > 0)
+        {
+            var common = parents[0];
+            while (common != "" && !parents.All(p => p.Equals(common, StringComparison.OrdinalIgnoreCase)
+                                                     || p.StartsWith(Path.TrimEndingDirectorySeparator(common) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
+                common = Path.GetDirectoryName(common) ?? "";
+            if (common != "") return common;
+        }
+        return localRoot;
+    }
+
+    void Compress_Click(object sender, RoutedEventArgs e)
+    {
+        if (winrar is not { } exe || compression is not null) return;
+        if (destination is not { } target || auth.AccountId == "" || drive is null)
+        {
+            Notice("Escolha a pasta de destino e clique em Usar esta pasta.");
+            return;
+        }
+        if (CheckedFolders().Count > 1)
+        {
+            Notice("Marque só uma pasta para compactar.");
+            return;
+        }
+        var current = SelectedFolder();
+        var (account, client) = (auth.AccountId, drive);
+        CompressOptions options;
+        try { options = db.Setting<CompressOptions?>("compress_options", null) ?? new(); }
+        catch (JsonException) { options = new(); }
+
+        async Task<Compression> Begin(string source, string output, string name, CompressOptions chosen, long split, string password)
+        {
+            await CheckDriveNames(client, target.Id, WinRar.CleanName(name), chosen.Format);
+            var job = new Compression(exe, source, output, name, chosen.Format, chosen.Method, split, password)
+            {
+                Destination = target, Account = account,
+            };
+            db.SaveSetting("compress_options", chosen);
+            db.Event("", $"COMPRESSION_STARTED format={chosen.Format} split={split}");
+            return job;
+        }
+
+        var job = CompressDialog.Show(this, Directory.Exists(current) ? current : "", options, Begin);
+        if (job is null) return;
+        compression = job;
+        // A pasta compactada sobe pelos volumes, não arquivo por arquivo.
+        if (checkedPaths.Contains(job.Source)) SetChecked(job.Source, false);
+        UpdateCompressButton();
+        Refresh();
+    }
+
+    /// <summary>Antes de compactar: volumes com o mesmo nome já no destino do Drive.</summary>
+    async Task CheckDriveNames(DriveClient client, string folderId, string baseName, string format)
+    {
+        List<string> names;
+        try { names = await client.NamesStarting(folderId, baseName); }
+        catch (Exception exc) when (exc is not ArgumentException)
+        {
+            db.Event("", $"DRIVE_NAME_CHECK_FAILED type={exc.GetType().Name}");
+            return; // Sem conexão: o envio ainda confere cada volume antes de subir.
+        }
+        var clash = names.Where(n => WinRar.IsVolume(n, baseName, format)).Order(StringComparer.Ordinal).FirstOrDefault();
+        if (clash is not null) throw new ArgumentException($"Já existe {clash} na pasta de destino do Drive. Escolha outro nome.");
+    }
+
+    void PollCompression()
+    {
+        if (compression is not { } job) return;
+        var errors = new List<string>();
+        foreach (var path in job.Poll())
+        {
+            try
+            {
+                var id = db.Add(path, job.Destination.Id, job.Destination.Name, job.Account, compressed: true, notifyName: Path.GetFileName(job.Source));
+                db.Event(id, "ADDED_TO_QUEUE_FROM_COMPRESSION");
+                manager.Start(id);
+            }
+            catch (Exception exc) when (exc is IOException or ArgumentException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                errors.Add($"{Path.GetFileName(path)}: {exc.Message}");
+            }
+        }
+        PaceCompression(job);
+        if (!job.Running)
+        {
+            compression = null;
+            manager.RateLimit = 0;
+            UpdateCompressButton();
+            db.Event("", $"COMPRESSION_FINISHED code={job.Result} cancelled={job.Cancelled}");
+            if (job.Error != "" && !job.Cancelled) errors.Add(job.Error);
+        }
+        // Avisos só depois de atualizar o estado: o diálogo deixa o timer rodar.
+        if (errors.Count > 0) Dispatcher.BeginInvoke(() => Notice(string.Join("\n", errors)));
+    }
+
+    /// <summary>Avançado: WinRAR e upload se alternam no disco. Normal: upload limitado.</summary>
+    void PaceCompression(Compression job)
+    {
+        var uploading = manager.RunningCount > 0 || db.All().Any(x => x.Status == Status.Waiting && x.Enabled);
+        if (db.Setting("advanced_pipeline", false))
+        {
+            manager.RateLimit = 0;
+            if (uploading && job.Running) job.Suspend();
+            else job.Resume();
+        }
+        else
+        {
+            job.Resume();
+            manager.RateLimit = job.Running ? db.Setting("compress_upload_limit", 1.0) * 1024 * 1024 : 0;
+        }
+    }
+
+    /// <summary>Parar ou remover a linha do WinRAR cancela a compactação.</summary>
+    bool CancelCompression(string? id)
+    {
+        if (id is null || !id.StartsWith(CompressPrefix, StringComparison.Ordinal)) return false;
+        if (compression is { } job && Dialogs.Ask(this, "Cancelar compactação", "Parar o WinRAR? Os volumes já prontos continuam na fila."))
+        {
+            job.Cancel();
+            Refresh();
+        }
+        return true;
+    }
+
+    const string CompressPrefix = "compress:";
 
     // ---- Fila
 
@@ -798,7 +960,7 @@ public partial class MainWindow : Window
 
     void RowPlay_Click(object sender, RoutedEventArgs e)
     {
-        if (RowId(sender) is not { } id || db.Get(id) is not { } item || manager.IsRemoving(id)) return;
+        if (RowId(sender) is not { } id || id.StartsWith(CompressPrefix, StringComparison.Ordinal) || db.Get(id) is not { } item || manager.IsRemoving(id)) return;
         if (item.Status == Status.Canceled && !manager.IsRunning(id)) db.Update(id, new() { Status = Status.Paused });
         db.Update(id, new() { Enabled = true });
         try { manager.Start(id); }
@@ -808,16 +970,18 @@ public partial class MainWindow : Window
 
     void RowPause_Click(object sender, RoutedEventArgs e)
     {
-        if (RowId(sender) is { } id) manager.Pause(id);
+        if (RowId(sender) is { } id && !id.StartsWith(CompressPrefix, StringComparison.Ordinal)) manager.Pause(id);
     }
 
     void RowStop_Click(object sender, RoutedEventArgs e)
     {
+        if (CancelCompression(RowId(sender))) return;
         if (RowId(sender) is { } id) manager.Pause(id, cancel: true);
     }
 
     void RowRemove_Click(object sender, RoutedEventArgs e)
     {
+        if (CancelCompression(RowId(sender))) return;
         if (RowId(sender) is { } id && Dialogs.Ask(this, "Remover da fila", "Remover da lista? Nenhum arquivo é apagado."))
         {
             manager.Remove(id);
@@ -827,11 +991,12 @@ public partial class MainWindow : Window
 
     void QueueEnabledChanged(QueueRow row, bool enabled)
     {
+        if (row.IsVirtual) return;
         db.Update(row.Id, new() { Enabled = enabled });
         if (!enabled) manager.Pause(row.Id);
     }
 
-    UploadItem? SelectedQueueItem => QueueList.SelectedItem is QueueRow row ? db.Get(row.Id) : null;
+    UploadItem? SelectedQueueItem => QueueList.SelectedItem is QueueRow { IsVirtual: false } row ? db.Get(row.Id) : null;
 
     void QueueList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -898,6 +1063,7 @@ public partial class MainWindow : Window
     void Refresh()
     {
         manager.Tick();
+        PollCompression();
         var rows = db.All();
         var pending = rows.Where(x => x.Status != Status.Done).ToList();
         var done = rows.Where(x => x.Status == Status.Done).ToList();
@@ -907,7 +1073,7 @@ public partial class MainWindow : Window
         StatDone.Text = done.Count.ToString();
         StartButton.Content = ContinueText(pending);
         WarnDuplicates(pending);
-        Sync(pending);
+        Sync(pending, compression);
         if (history.Count != done.Count || history.FirstOrDefault()?.Id != done.LastOrDefault()?.Id)
         {
             var selected = (HistoryList.SelectedItem as HistoryRow)?.Id;
@@ -918,7 +1084,11 @@ public partial class MainWindow : Window
         SampleCharts(rows);
         var newlyDone = done.Where(x => !completedIds.Contains(x.Id)).ToList();
         completedIds = done.Select(x => x.Id).ToHashSet();
-        notifier.UploadsCompleted(rows, newlyDone);
+        // Volumes ainda por vir seguram o aviso até o último subir.
+        notifier.UploadsCompleted(compression is { } job
+            ? [.. rows, new UploadItem { Id = CompressPrefix + job.Name, Path = job.Source, Name = job.Name, Status = Status.Waiting,
+                                         Account = job.Account, FolderName = job.Destination.Name, NotifyName = Path.GetFileName(job.Source) }]
+            : rows, newlyDone);
         if (auth.AccountId != "")
             foreach (var folderId in newlyDone.Where(x => x.Account == auth.AccountId).Select(x => x.FolderId).Distinct())
                 RefreshFolder(folderId);
@@ -931,9 +1101,11 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Atualiza as linhas no lugar, para não perder a seleção nem piscar.</summary>
-    void Sync(List<UploadItem> items)
+    void Sync(List<UploadItem> items, Compression? job = null)
     {
         var ids = items.Select(x => x.Id).ToHashSet();
+        var virtualId = job is null ? null : CompressPrefix + job.Name;
+        if (virtualId is not null) ids.Add(virtualId);
         foreach (var stale in queue.Where(r => !ids.Contains(r.Id)).ToList()) queue.Remove(stale);
         for (var i = 0; i < items.Count; i++)
         {
@@ -954,6 +1126,12 @@ public partial class MainWindow : Window
             }
             row.Load(item, manager.IsRemoving(item.Id));
         }
+        if (job is null || virtualId is null) return;
+        // A linha do WinRAR fica por último, abaixo dos volumes já na fila.
+        var compressRow = queue.FirstOrDefault(r => r.Id == virtualId);
+        if (compressRow is null) queue.Add(compressRow = new QueueRow(virtualId, QueueEnabledChanged));
+        else if (queue.IndexOf(compressRow) != queue.Count - 1) queue.Move(queue.IndexOf(compressRow), queue.Count - 1);
+        compressRow.LoadCompression(job);
     }
 
     // ---- Gráficos (charts.py)

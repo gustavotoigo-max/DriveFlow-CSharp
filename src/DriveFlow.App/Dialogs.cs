@@ -9,11 +9,11 @@ namespace DriveFlow.App;
 /// <summary>Janelas de aviso, confirmação e texto no padrão da janela principal (sem borda, cabeçalho azul-marinho).</summary>
 public static class Dialogs
 {
-    static (Window Window, StackPanel Body, StackPanel Buttons) Build(Window? owner, string title)
+    internal static (Window Window, StackPanel Body, StackPanel Buttons) Build(Window? owner, string title, double width = 440)
     {
         var window = new Window
         {
-            Owner = owner, Title = title, SizeToContent = SizeToContent.Height, Width = 440, ResizeMode = ResizeMode.NoResize,
+            Owner = owner, Title = title, SizeToContent = SizeToContent.Height, Width = width, ResizeMode = ResizeMode.NoResize,
             WindowStartupLocation = owner is null ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner,
             ShowInTaskbar = owner is null, WindowStyle = WindowStyle.None,
         };
@@ -32,7 +32,7 @@ public static class Dialogs
         var line = new Border { Height = 2, Background = new LinearGradientBrush(Color.FromRgb(0x25, 0x63, 0xEB), Color.FromRgb(0x22, 0xD3, 0xEE), 0) };
         DockPanel.SetDock(line, Dock.Top);
         root.Children.Add(line);
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(18, 0, 10, 16) };
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(18, 0, 18, 16) };
         DockPanel.SetDock(buttons, Dock.Bottom);
         root.Children.Add(buttons);
         var body = new StackPanel { Margin = new Thickness(18, 16, 18, 16) };
@@ -42,16 +42,16 @@ public static class Dialogs
         return (window, body, buttons);
     }
 
-    static TextBlock Text(string text)
+    internal static TextBlock Text(string text)
     {
         var block = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap };
         block.SetResourceReference(TextBlock.ForegroundProperty, "Text");
         return block;
     }
 
-    static Button AddButton(StackPanel buttons, string text, bool primary, Action click)
+    internal static Button AddButton(StackPanel buttons, string text, bool primary, Action click)
     {
-        var button = new Button { Content = text, IsDefault = primary };
+        var button = new Button { Content = text, IsDefault = primary, MinWidth = 88, Margin = new Thickness(4, 0, 4, 0) };
         if (primary) button.SetResourceReference(FrameworkElement.StyleProperty, "Primary");
         button.Click += (_, _) => click();
         buttons.Children.Add(button);

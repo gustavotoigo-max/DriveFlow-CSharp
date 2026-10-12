@@ -213,7 +213,7 @@
                     <Border Grid.Row="2" Style="{StaticResource Card}">
                         <DockPanel>
                             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
-                                <Button x:Name="CompressButton" Click="Compress_Click" IsEnabled="False">
+                                <Button x:Name="CompressButton" Click="Compress_Click" IsEnabled="False" ToolTipService.ShowOnDisabled="True">
                                     <StackPanel Orientation="Horizontal">
                                         <Image x:Name="CompressIcon" Width="18" Height="18" Margin="0,0,6,0" Visibility="Collapsed" />
                                         <TextBlock Text="Compactar" />
@@ -263,7 +263,17 @@
                                                         <ColumnDefinition Width="196" />
                                                     </Grid.ColumnDefinitions>
                                                     <DockPanel VerticalAlignment="Center" Margin="4,0,24,0">
-                                                        <CheckBox DockPanel.Dock="Left" IsChecked="{Binding Enabled, Mode=TwoWay}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                                        <CheckBox DockPanel.Dock="Left" IsChecked="{Binding Enabled, Mode=TwoWay}" Margin="0,0,8,0" VerticalAlignment="Center">
+                                                            <CheckBox.Style>
+                                                                <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsVirtual}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Hidden" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </CheckBox.Style>
+                                                        </CheckBox>
                                                         <StackPanel VerticalAlignment="Center">
                                                             <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                                                             <TextBlock Text="{Binding Destination}" TextTrimming="CharacterEllipsis" />
@@ -271,7 +281,9 @@
                                                     </DockPanel>
                                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="16,0">
                                                         <TextBlock Text="{Binding BytesText}" Foreground="{DynamicResource Muted}" HorizontalAlignment="Center" Margin="0,0,0,4" />
-                                                        <local:SmoothBar Identity="{Binding Id}" Animate="{Binding IsActive}" Value="{Binding Progress}" />
+                                                        <local:SmoothBar Identity="{Binding PackingIdentity}" Animate="{Binding IsVirtual}" Value="{Binding PackingProgress}" Caption="Compactação"
+                                                                         Visibility="{Binding IsCompressed, Converter={StaticResource Visible}}" Margin="0,0,0,4" />
+                                                        <local:SmoothBar Identity="{Binding Id}" Animate="{Binding IsActive}" Value="{Binding Progress}" Caption="{Binding UploadCaption}" />
                                                     </StackPanel>
                                                     <TextBlock Grid.Column="2" Text="{Binding StatusText}" VerticalAlignment="Center" Margin="8,0">
                                                         <TextBlock.Style>
@@ -287,8 +299,8 @@
                                                     </TextBlock>
                                                     <TextBlock Grid.Column="3" Text="{Binding TimeText}" VerticalAlignment="Center" Margin="8,0" />
                                                     <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0,12,0">
-                                                        <Button Style="{StaticResource RowControl}" Content="{x:Static local:Icons.Play}" ToolTip="Iniciar / continuar" Click="RowPlay_Click" IsEnabled="{Binding CanAct}" />
-                                                        <Button Style="{StaticResource RowControl}" Content="{x:Static local:Icons.Pause}" ToolTip="Pausar" Click="RowPause_Click" IsEnabled="{Binding CanAct}" Margin="6,0,0,0" />
+                                                        <Button Style="{StaticResource RowControl}" Content="{x:Static local:Icons.Play}" ToolTip="Iniciar / continuar" Click="RowPlay_Click" IsEnabled="{Binding CanPlay}" />
+                                                        <Button Style="{StaticResource RowControl}" Content="{x:Static local:Icons.Pause}" ToolTip="Pausar" Click="RowPause_Click" IsEnabled="{Binding CanPlay}" Margin="6,0,0,0" />
                                                         <Button Style="{StaticResource RowControl}" Content="{x:Static local:Icons.Stop}" ToolTip="Parar" Click="RowStop_Click" IsEnabled="{Binding CanAct}" Margin="6,0,0,0" />
                                                         <Button Style="{StaticResource RowControl}" Content="{x:Static local:Icons.Remove}" ToolTip="Remover da lista" Click="RowRemove_Click" IsEnabled="{Binding CanAct}" Margin="18,0,0,0" />
                                                     </StackPanel>

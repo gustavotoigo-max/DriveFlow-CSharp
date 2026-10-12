@@ -125,6 +125,11 @@ public sealed partial class DriveClient(HttpClient http)
         (await ListFiles($"'{Escape(parent)}' in parents and trashed=false", ct).ConfigureAwait(false))
             .OrderBy(f => !f.IsFolder).ThenBy(f => f.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
 
+    /// <summary>Nomes na pasta que contêm o prefixo (volumes que já existem no destino).</summary>
+    public async Task<List<string>> NamesStarting(string parent, string prefix, CancellationToken ct = default) =>
+        (await ListFiles($"'{Escape(parent)}' in parents and trashed=false and name contains '{Escape(prefix)}'", ct).ConfigureAwait(false))
+            .Select(f => f.Name).ToList();
+
     public Task<List<DriveFile>> Duplicates(string parent, string name, CancellationToken ct = default) =>
         ListFiles($"'{Escape(parent)}' in parents and trashed=false and name='{Escape(name)}'", ct);
 
