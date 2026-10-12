@@ -79,6 +79,7 @@ public partial class App : Application
                 File.WriteAllText(smokeOutput, JsonSerializer.Serialize(new
                 {
                     ok = true, version = global::DriveFlow.App.MainWindow.Version, title = window.Title, rows = db.All().Count,
+                    login = OAuthClient.Bundled() is not null,
                 }));
                 window.ForceClose();
                 db.Dispose();

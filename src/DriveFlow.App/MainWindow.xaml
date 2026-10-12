@@ -147,7 +147,7 @@
                                     <TextBlock Text="Arquivos locais" Style="{StaticResource Section}" VerticalAlignment="Center" />
                                 </DockPanel>
                                 <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
-                                    <Button DockPanel.Dock="Left" Click="Units_Click" Height="34" Padding="14,0">
+                                    <Button DockPanel.Dock="Left" Click="Units_Click" Height="34" Padding="12,0">
                                         <StackPanel Orientation="Horizontal">
                                             <Image x:Name="UnitsIcon" Width="20" Height="20" Margin="0,0,4,0" />
                                             <TextBlock Text="Unidades" VerticalAlignment="Center" />
@@ -463,7 +463,7 @@
                                 <TextBlock x:Name="ClientNote" Style="{StaticResource MutedText}" Margin="0,0,0,6"
                                            Text="Conectar conta pede o JSON OAuth (Aplicativo para computador) do Google Cloud." />
                                 <Button Content="Usar outro JSON OAuth…" Click="ImportClient_Click" Margin="0,0,0,6" />
-                                <TextBox x:Name="DataDirText" IsReadOnly="True" BorderThickness="0" Background="Transparent" Padding="0"
+                                <TextBox x:Name="DataDirText" IsReadOnly="True" BorderThickness="0" Background="Transparent" Padding="0" Height="Auto"
                                          Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,0,0,6">
                                     <TextBox.Template>
                                         <ControlTemplate TargetType="TextBox">

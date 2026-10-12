@@ -21,7 +21,7 @@ A versão atual, em Python, continua em [DriveFlow](https://github.com/gustavoto
 - **Configurações**: tema, uploads simultâneos, bloco, tentativas, permissão, WhatsApp e conta.
 - **Atividade**: os eventos registrados, com exportação.
 
-Ainda faltam os Gráficos, o Compactar com WinRAR, o monitor Firebase e o pareamento do celular, o atualizador, o instalador e a migração dos dados da versão Python.
+Ainda faltam o Compactar com WinRAR, o monitor Firebase e o pareamento do celular, o atualizador e a migração dos dados da versão Python.
 
 ## Compilar e testar
 
@@ -33,6 +33,10 @@ Publicar.bat
 ```
 
 `Publicar.bat` gera `publish\DriveFlow\DriveFlow.exe` em pasta (já com o .NET dentro, sem instalar nada) e abre o pacote no modo de teste rápido (`--smoke-test`).
+
+## Instalador privado
+
+`Instalador.bat` roda o `Publicar.bat` e gera `publish\DriveFlow-Setup-PRIVADO-vX.exe` com o [Inno Setup 6](https://jrsoftware.org/isinfo.php). Ele só gera se o `oauth_client.json` estiver na raiz, para o instalado já entrar com o Google. Esse instalador leva a credencial: não vai para o GitHub nem para releases.
 
 O login embutido usa o arquivo `oauth_client.json` (cliente OAuth de "Aplicativo para computador") na raiz do repositório. Ele fica fora do Git; sem ele, o app pede o JSON ao conectar.
 

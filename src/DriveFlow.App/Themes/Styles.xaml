@@ -208,7 +208,9 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="box" Background="{TemplateBinding Background}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <!-- TextBlock próprio: o estilo geral de texto trocaria a fonte de ícones pela Segoe UI. -->
+                        <TextBlock Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}" FontFamily="{StaticResource IconFont}"
+                                   FontSize="10" Foreground="{TemplateBinding Foreground}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
@@ -224,7 +226,8 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border Background="{TemplateBinding Background}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}" FontFamily="{StaticResource IconFont}"
+                                   FontSize="10" Foreground="{TemplateBinding Foreground}" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                 </ControlTemplate>
             </Setter.Value>
@@ -277,7 +280,8 @@
         <Setter Property="BorderBrush" Value="{DynamicResource Strong}" />
         <Setter Property="CaretBrush" Value="{DynamicResource Text}" />
         <Setter Property="SelectionBrush" Value="{DynamicResource Accent}" />
-        <Setter Property="Padding" Value="7,7" />
+        <Setter Property="Padding" Value="9,0" />
+        <Setter Property="Height" Value="34" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Template">
             <Setter.Value>
@@ -310,6 +314,7 @@
         <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
         <Setter Property="VerticalContentAlignment" Value="Top" />
         <Setter Property="Padding" Value="4" />
+        <Setter Property="Height" Value="Auto" />
     </Style>
 
     <!-- Caixa de seleção 18 px, raio 2, marcada na cor de destaque. -->
@@ -369,6 +374,7 @@
         </Setter>
     </Style>
     <Style TargetType="ComboBox">
+        <Setter Property="Height" Value="34" />
         <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
         <Setter Property="FontSize" Value="13" />
         <Setter Property="Foreground" Value="{DynamicResource Text}" />
@@ -398,7 +404,7 @@
                                 </ControlTemplate>
                             </ToggleButton.Template>
                         </ToggleButton>
-                        <ContentPresenter Margin="10,8,30,8" IsHitTestVisible="False" VerticalAlignment="Center"
+                        <ContentPresenter Margin="10,0,30,0" IsHitTestVisible="False" VerticalAlignment="Center"
                                           Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" />
                         <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
                             <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="1"

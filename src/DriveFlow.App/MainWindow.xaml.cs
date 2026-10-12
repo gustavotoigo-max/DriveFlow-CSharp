@@ -98,7 +98,7 @@ public partial class MainWindow : Window
         LoadSettings();
         UpdateCompressButton();
         ShowStatus(DefaultStatus);
-        StateChanged += (_, _) => MaximizeButton.Content = WindowState == WindowState.Maximized ? "" : "";
+        StateChanged += (_, _) => WindowStateChanged();
         timer.Tick += (_, _) => Refresh();
         timer.Start();
         folderTimer.Tick += (_, _) => RefreshWatchedFolders();
@@ -176,6 +176,29 @@ public partial class MainWindow : Window
     }
 
     // ---- Janela
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    static extern int GetSystemMetrics(int index);
+
+    /// <summary>
+    /// Sem moldura, a janela maximizada passa da tela pela borda de redimensionar e cortaria os botões
+    /// de minimizar, maximizar e fechar; a margem compensa. O botão vira Restaurar.
+    /// </summary>
+    void WindowStateChanged()
+    {
+        var maximized = WindowState == WindowState.Maximized;
+        MaximizeButton.Content = maximized ? "\uE923" : "\uE922";
+        MaximizeButton.ToolTip = maximized ? "Restaurar" : "Maximizar";
+        if (!maximized)
+        {
+            Root.Margin = new Thickness(0);
+            return;
+        }
+        var scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+        var padded = GetSystemMetrics(92) / scale; // SM_CXPADDEDBORDER
+        var border = SystemParameters.WindowResizeBorderThickness;
+        Root.Margin = new Thickness(border.Left + padded, border.Top + padded, border.Right + padded, border.Bottom + padded);
+    }
 
     void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
     void Maximize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
